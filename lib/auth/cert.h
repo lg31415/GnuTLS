@@ -55,6 +55,8 @@ typedef struct gnutls_certificate_credentials_st {
 	 * cert_list[i][0].
 	 */
 
+	gnutls_str_array_t ocsp_response_files;
+
 #ifdef ENABLE_OPENPGP
 	/* OpenPGP specific stuff */
 	gnutls_openpgp_keyring_t keyring;
@@ -63,6 +65,7 @@ typedef struct gnutls_certificate_credentials_st {
 	/* X509 specific stuff */
 	gnutls_x509_trust_list_t tlist;
 	unsigned flags; /* gnutls_certificate_flags */
+
 	unsigned int verify_flags;	/* flags to be used at 
 					 * certificate verification.
 					 */
@@ -83,7 +86,6 @@ typedef struct gnutls_certificate_credentials_st {
 	/* OCSP */
 	gnutls_status_request_ocsp_func ocsp_func;
 	void *ocsp_func_ptr;
-	char *ocsp_response_file;
 } certificate_credentials_st;
 
 typedef struct rsa_info_st {

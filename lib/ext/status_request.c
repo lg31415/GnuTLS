@@ -34,6 +34,8 @@
 #include <auth.h>
 #include <auth/cert.h>
 #include <handshake.h>
+#include <minmax.h>
+#include "str_array.h"
 
 #ifdef ENABLE_OCSP
 
@@ -431,11 +433,40 @@ static int file_ocsp_func(gnutls_session_t session, void *ptr,
 	int ret;
 	gnutls_certificate_credentials_t sc = ptr;
 
-	ret = gnutls_load_file(sc->ocsp_response_file, ocsp_response);
-	if (ret < 0)
-		return gnutls_assert_val(GNUTLS_E_NO_CERTIFICATE_STATUS);
+	/* the server certificate is already selected */
 
-	return 0;
+	if (sc->ncerts == 1 && sc->ocsp_response_files && sc->ocsp_response_files->next == NULL) {
+		ret = gnutls_load_file(sc->ocsp_response_files[0].str, ocsp_response);
+		if (ret < 0) {
+			gnutls_assert();
+			goto fail;
+		}
+
+		return 0;
+	} else if (sc->ocsp_response_files) {
+		unsigned i;
+
+		for (i=0;i<sc->ncerts;i++) {
+			if (session->internals.selected_cert_list == sc->certs[i].cert_list) {
+				/* found match */
+				const char* file = _gnutls_str_array_index(sc->ocsp_response_files, i);
+				if (file == NULL) {
+					gnutls_assert();
+					goto fail;
+				}
+				ret = gnutls_load_file(file, ocsp_response);
+				if (ret < 0) {
+					gnutls_assert();
+					goto fail;
+				}
+
+				return 0;
+			}
+		}
+	}
+
+ fail:
+	return GNUTLS_E_NO_CERTIFICATE_STATUS;
 }
 
 /**
@@ -451,6 +482,13 @@ static int file_ocsp_func(gnutls_session_t session, void *ptr,
  * gnutls_certificate_set_ocsp_status_request_function() to fine-tune
  * file accesses.
  *
+ * Since GnuTLS 3.5.3 when multiple certificates are present in the
+ * credentials structure this function can be called multiple times
+ * once per available certificate. Note that in that case the order
+ * that responses are set, must correspond to the order certificates
+ * were added. That is, a corresponding OCSP response must be set with this function
+ * after each call to gnutls_certificate_set_x509_key_file().
+ *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
  *
@@ -461,12 +499,14 @@ gnutls_certificate_set_ocsp_status_request_file
 (gnutls_certificate_credentials_t sc, const char *response_file,
  unsigned int flags)
 {
+	int ret;
+
+	ret = _gnutls_str_array_append(&sc->ocsp_response_files, response_file, strlen(response_file));
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
 	sc->ocsp_func = file_ocsp_func;
 	sc->ocsp_func_ptr = sc;
-	gnutls_free(sc->ocsp_response_file);
-	sc->ocsp_response_file = gnutls_strdup(response_file);
-	if (sc->ocsp_response_file == NULL)
-		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
 
 	return 0;
 }

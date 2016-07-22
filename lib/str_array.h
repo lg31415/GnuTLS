@@ -67,6 +67,23 @@ inline static int _gnutls_str_array_match(gnutls_str_array_t head,
 	return 0;
 }
 
+inline static const char* _gnutls_str_array_index(gnutls_str_array_t head, unsigned idx)
+{
+	gnutls_str_array_t array = head;
+	unsigned i;
+
+	if (array == NULL)
+		return NULL;
+
+	for (i=0;i<idx;i++) {
+		array = array->next;
+		if (array == NULL)
+			return NULL;
+	}
+
+	return array->str;
+}
+
 inline static void append(gnutls_str_array_t array, const char *str,
 			  int len)
 {

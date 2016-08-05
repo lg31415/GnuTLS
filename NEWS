@@ -34,6 +34,10 @@ See the end for copying conditions.
    ignoring flags if all certificates in the list fit within the
    initially allocated memory. Patch by Tim Kosse.
 
+** libgnutls: Added flags to gnutls_certificate_set_flags() and
+   gnutls_x509_trust_list_add_trust_file() to allow speeding up
+   the loading of the PKCS#11 trust store (when available).
+
 ** certtool: Added the "add_extension" and "add_critical_extension"
    template options. This allows specifying arbitrary extensions into
    certificates and certificate requests.
@@ -42,6 +46,8 @@ See the end for copying conditions.
 
 ** API and ABI modifications:
 GNUTLS_E_UNAVAILABLE_DURING_HANDSHAKE: Added
+GNUTLS_TL_FAST_LOAD: Added
+GNUTLS_CERTIFICATE_FAST_LOAD: Added
 gnutls_x509_crq_set_extension_by_oid: Added
 gnutls_x509_dn_set_str: Added
 gnutls_transport_set_fastopen: Added

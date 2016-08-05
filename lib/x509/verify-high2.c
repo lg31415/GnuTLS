@@ -34,6 +34,7 @@
 #include "verify-high.h"
 #include "read-file.h"
 #include <pkcs11_int.h>
+#include <limits.h>
 
 #include <dirent.h>
 
@@ -327,6 +328,10 @@ gnutls_x509_trust_list_add_trust_file(gnutls_x509_trust_list_t list,
 				if (list->pkcs11_token != NULL)
 					return gnutls_assert_val(GNUTLS_E_INVALID_REQUEST);
 				list->pkcs11_token = gnutls_strdup(ca_file);
+
+				/* skip cert enumeration */
+				if (tl_flags & GNUTLS_TL_FAST_LOAD)
+					return INT_MAX;
 
 				/* enumerate the certificates */
 				ret = gnutls_pkcs11_obj_list_import_url(NULL, &pcrt_list_size,

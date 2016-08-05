@@ -1697,6 +1697,7 @@ gnutls_certificate_set_x509_trust(gnutls_certificate_credentials_t res,
 	return ret;
 }
 
+#define CRED_FLAGS_TO_TL_FLAGS(_flags) (GNUTLS_TL_USE_IN_TLS|((_flags & GNUTLS_CERTIFICATE_FAST_LOAD)?GNUTLS_TL_FAST_LOAD:0))
 
 /**
  * gnutls_certificate_set_x509_trust_file:
@@ -1725,10 +1726,11 @@ gnutls_certificate_set_x509_trust_file(gnutls_certificate_credentials_t
 				       cred, const char *cafile,
 				       gnutls_x509_crt_fmt_t type)
 {
-int ret;
+	int ret;
+	unsigned flags = CRED_FLAGS_TO_TL_FLAGS(cred->flags);
 
 	ret = gnutls_x509_trust_list_add_trust_file(cred->tlist, cafile, NULL, 
-						type, GNUTLS_TL_USE_IN_TLS, 0);
+						type, flags, 0);
 	if (ret == GNUTLS_E_NO_CERTIFICATE_FOUND)
 		return 0;
 
@@ -1756,10 +1758,11 @@ gnutls_certificate_set_x509_trust_dir(gnutls_certificate_credentials_t cred,
 				      const char *ca_dir,
 				      gnutls_x509_crt_fmt_t type)
 {
-int ret;
+	int ret;
+	unsigned flags = CRED_FLAGS_TO_TL_FLAGS(cred->flags);
 
 	ret = gnutls_x509_trust_list_add_trust_dir(cred->tlist, ca_dir, NULL, 
-						type, GNUTLS_TL_USE_IN_TLS, 0);
+						   type, flags, 0);
 	if (ret == GNUTLS_E_NO_CERTIFICATE_FOUND)
 		return 0;
 
@@ -1785,8 +1788,10 @@ int
 gnutls_certificate_set_x509_system_trust(gnutls_certificate_credentials_t
 					 cred)
 {
+	unsigned flags = CRED_FLAGS_TO_TL_FLAGS(cred->flags);
+
 	return gnutls_x509_trust_list_add_system_trust(cred->tlist, 
-					GNUTLS_TL_USE_IN_TLS, 0);
+						       flags, 0);
 }
 
 /**

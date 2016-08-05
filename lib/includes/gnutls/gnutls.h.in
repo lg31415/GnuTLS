@@ -1644,11 +1644,15 @@ gnutls_certificate_get_verify_flags(gnutls_certificate_credentials_t res);
 /**
  * gnutls_certificate_flags:
  * @GNUTLS_CERTIFICATE_SKIP_KEY_CERT_MATCH: Skip the key and certificate matching check.
+ * @GNUTLS_CERTIFICATE_FAST_LOAD: Skip the CA certificate enumeration where possible.
+ *   This flag applies to gnutls_certificate_set_x509_trust_file() and gnutls_certificate_set_x509_system_trust(),
+ *   and corresponds to %GNUTLS_TL_FAST_LOAD flag for PKCS#11 trust lists.
  *
  * Enumeration of different certificate credentials flags.
  */
 typedef enum gnutls_certificate_flags {
-	GNUTLS_CERTIFICATE_SKIP_KEY_CERT_MATCH = 1
+	GNUTLS_CERTIFICATE_SKIP_KEY_CERT_MATCH = 1,
+	GNUTLS_CERTIFICATE_FAST_LOAD = (1<<1)
 } gnutls_certificate_flags;
 
 void gnutls_certificate_set_flags(gnutls_certificate_credentials_t,

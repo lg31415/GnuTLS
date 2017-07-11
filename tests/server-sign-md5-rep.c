@@ -156,7 +156,7 @@ static void server(int sd)
 	/* avoid calling all the priority functions, since the defaults
 	 * are adequate.
 	 */
-	gnutls_priority_set_direct(session, "NORMAL", NULL);
+	gnutls_priority_set_direct(session, "NORMAL:-RSA", NULL);
 	gnutls_handshake_set_timeout(session, 20 * 1000);
 
 	gnutls_credentials_set(session, GNUTLS_CRD_CERTIFICATE, x509_cred);
@@ -166,7 +166,7 @@ static void server(int sd)
 		ret = gnutls_handshake(session);
 	} while(ret == GNUTLS_E_INTERRUPTED || ret == GNUTLS_E_AGAIN);
 
-	if (ret != GNUTLS_E_UNWANTED_ALGORITHM) {
+	if (ret != GNUTLS_E_NO_CIPHER_SUITES) {
 		fail("server: Handshake succeeded unexpectedly: %s\n", gnutls_strerror(ret));
 	}
 

@@ -245,6 +245,10 @@ static void verify_alpn(gnutls_session_t session, struct params_res *params, uns
 		success("ALPN got: %s\n", str);
 }
 
+#ifdef TLS12
+# define VERS_STR "+VERS-TLS1.2"
+#endif
+
 static void client(int sds[], struct params_res *params)
 {
 	int ret, ii;
@@ -253,14 +257,14 @@ static void client(int sds[], struct params_res *params)
 	unsigned int ext_master_secret_check = 0;
 	char prio_str[256];
 #ifdef USE_PSK
-# define PRIO_STR "NONE:+VERS-TLS-ALL:+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+PSK:+CURVE-ALL"
+# define PRIO_STR "NONE:"VERS_STR":+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+PSK:+CURVE-ALL"
 	const gnutls_datum_t pskkey = { (void *) "DEADBEEF", 8 };
 	gnutls_psk_client_credentials_t pskcred;
 #elif defined(USE_ANON)
-# define PRIO_STR "NONE:+VERS-TLS-ALL:+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+ANON-ECDH:+ANON-DH:+CURVE-ALL"
+# define PRIO_STR "NONE:"VERS_STR":+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+ANON-ECDH:+ANON-DH:+CURVE-ALL"
 	gnutls_anon_client_credentials_t anoncred;
 #elif defined(USE_X509)
-# define PRIO_STR "NONE:+VERS-TLS-ALL:+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+ECDHE-RSA:+RSA:+CURVE-ALL"
+# define PRIO_STR "NONE:"VERS_STR":+CIPHER-ALL:+MAC-ALL:+SIGN-ALL:+COMP-ALL:+ECDHE-RSA:+RSA:+CURVE-ALL"
 	gnutls_certificate_credentials_t clientx509cred;
 #endif
 

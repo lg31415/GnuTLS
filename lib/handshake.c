@@ -363,7 +363,7 @@ int
 _gnutls_negotiate_legacy_version(gnutls_session_t session,
 			  gnutls_protocol_t adv_version, uint8_t major, uint8_t minor)
 {
-	int ret;
+	const version_entry_st *vers;
 
 	/* if we do not support that version  */
 	if (adv_version == GNUTLS_VERSION_UNKNOWN || _gnutls_version_is_supported(session, adv_version) == 0) {
@@ -375,21 +375,23 @@ _gnutls_negotiate_legacy_version(gnutls_session_t session,
 		/* If he requested something we do not support
 		 * then we send him the highest we support.
 		 */
-		ret = _gnutls_legacy_version_max(session);
-		if (ret == GNUTLS_VERSION_UNKNOWN) {
+		vers = _gnutls_legacy_version_max(session);
+		if (vers == NULL) {
 			/* this check is not really needed.
 			 */
 			gnutls_assert();
 			return GNUTLS_E_UNKNOWN_CIPHER_SUITE;
 		}
+
+		session->security_parameters.pversion = vers;
+
+		return vers->id;
 	} else {
-		ret = adv_version;
+		if (_gnutls_set_current_version(session, adv_version) < 0)
+			return gnutls_assert_val(GNUTLS_E_UNSUPPORTED_VERSION_PACKET);
+
+		return adv_version;
 	}
-
-	if (_gnutls_set_current_version(session, ret) < 0)
-		return gnutls_assert_val(GNUTLS_E_UNSUPPORTED_VERSION_PACKET);
-
-	return ret;
 }
 
 /* This function returns:
@@ -861,12 +863,14 @@ _gnutls_server_select_suite(gnutls_session_t session, uint8_t * data,
 		/* TLS_FALLBACK_SCSV */
 		if (data[i] == GNUTLS_FALLBACK_SCSV_MAJOR &&
 		    data[i + 1] == GNUTLS_FALLBACK_SCSV_MINOR) {
-			unsigned max = _gnutls_legacy_version_max(session);
+			const version_entry_st *vers = get_version(session);
+			const version_entry_st *max = _gnutls_version_max(session);
+
 			_gnutls_handshake_log
 			    ("HSK[%p]: Received fallback CS\n",
 			     session);
 
-			if (gnutls_protocol_get_version(session) != max)
+			if (vers != max)
 				return gnutls_assert_val(GNUTLS_E_INAPPROPRIATE_FALLBACK);
 		} else {
 			if (peer_clist.size < MAX_CIPHERSUITE_SIZE) {
@@ -1631,9 +1635,7 @@ static int send_client_hello(gnutls_session_t session, int again)
 			if (rehandshake)	/* already negotiated version thus version_max == negotiated version */
 				hver = get_version(session);
 			else	/* new handshake. just get the max */
-				hver =
-				    version_to_entry(_gnutls_legacy_version_max
-						     (session));
+				hver = _gnutls_legacy_version_max(session);
 		} else {
 			/* we are resuming a session */
 			hver =

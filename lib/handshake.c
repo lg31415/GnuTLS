@@ -1528,7 +1528,7 @@ read_server_hello(gnutls_session_t session,
 
 	pos += GNUTLS_RANDOM_SIZE;
 
-	if (!vers->compact_hello) {
+	if (!vers->tls13_sem) {
 		/* Read session ID
 		 */
 		DECR_LEN(len, 1);
@@ -1573,7 +1573,7 @@ read_server_hello(gnutls_session_t session,
 	}
 	pos += 2;
 
-	if (!vers->compact_hello) {
+	if (!vers->tls13_sem) {
 		/* move to compression
 		 */
 		DECR_LEN(len, 1);
@@ -1868,7 +1868,7 @@ static int send_server_hello(gnutls_session_t session, int again)
 			goto fail;
 		}
 
-		if (!vers->compact_hello) {
+		if (!vers->tls13_sem) {
 			datalen = 2 + session_id_len + 1 + GNUTLS_RANDOM_SIZE + 3 + extdata.length;
 		} else {
 			datalen = 2 + GNUTLS_RANDOM_SIZE + 2 + extdata.length;
@@ -1891,7 +1891,7 @@ static int send_server_hello(gnutls_session_t session, int again)
 		       GNUTLS_RANDOM_SIZE);
 		pos += GNUTLS_RANDOM_SIZE;
 
-		if (!vers->compact_hello) {
+		if (!vers->tls13_sem) {
 			data[pos++] = session_id_len;
 			if (session_id_len > 0) {
 				memcpy(&data[pos],
@@ -1911,7 +1911,7 @@ static int send_server_hello(gnutls_session_t session, int again)
 		       session->security_parameters.cs->id, 2);
 		pos += 2;
 
-		if (!vers->compact_hello) {
+		if (!vers->tls13_sem) {
 			data[pos++] = 0x00;
 		}
 

@@ -365,8 +365,19 @@ _gnutls_negotiate_legacy_version(gnutls_session_t session,
 {
 	const version_entry_st *vers;
 
-	/* if we do not support that version  */
+	/* if we do not support that version, unless that version is TLS 1.2;
+	 * TLS 1.2 is handled separately because it is always advertized under TLS 1.3 or later */
 	if (adv_version == GNUTLS_VERSION_UNKNOWN || _gnutls_version_is_supported(session, adv_version) == 0) {
+
+		if (adv_version == GNUTLS_TLS1_2) {
+			vers = _gnutls_version_max(session);
+			if (vers->id >= GNUTLS_TLS1_2) {
+				if (_gnutls_set_current_version(session, adv_version) < 0)
+					return gnutls_assert_val(GNUTLS_E_UNSUPPORTED_VERSION_PACKET);
+				return adv_version;
+			}
+		}
+
 		/* if we get an unknown/unsupported version, then fail if the version we
 		 * got is too low to be supported */
 		if (!_gnutls_version_is_too_high(session, major, minor))

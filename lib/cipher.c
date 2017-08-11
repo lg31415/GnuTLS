@@ -48,12 +48,30 @@ static int encrypt_packet(gnutls_session_t session,
 			    size_t min_pad,
 			    content_type_t _type,
 			    record_parameters_st * params);
+
 static int decrypt_packet(gnutls_session_t session,
 			    gnutls_datum_t * ciphertext,
 			    gnutls_datum_t * plain,
-			    uint8_t type,
+			    content_type_t type,
 			    record_parameters_st * params,
 			    gnutls_uint64 * sequence);
+
+static int
+decrypt_packet_tls13(gnutls_session_t session,
+		     gnutls_datum_t * ciphertext,
+		     gnutls_datum_t * plain,
+		     content_type_t *type, record_parameters_st * params,
+		     gnutls_uint64 * sequence);
+
+static int
+encrypt_packet_tls13(gnutls_session_t session,
+		     uint8_t * cipher_data, int cipher_size,
+		     gnutls_datum_t * plain,
+		     size_t min_pad,
+		     content_type_t type,
+		     record_parameters_st * params);
+
+
 
 /* returns ciphertext which contains the headers too. This also
  * calculates the size in the header field.
@@ -67,17 +85,26 @@ _gnutls_encrypt(gnutls_session_t session,
 		content_type_t type, record_parameters_st * params)
 {
 	gnutls_datum_t plaintext;
+	const version_entry_st *vers = get_version(session);
 	int ret;
 
 	plaintext.data = (uint8_t *) data;
 	plaintext.size = data_size;
 
-	ret =
-	    encrypt_packet(session,
-				     _mbuffer_get_udata_ptr(bufel),
-				     _mbuffer_get_udata_size
-				     (bufel), &plaintext, min_pad, type,
-				     params);
+	if (vers && vers->tls13_sem)
+		ret =
+		    encrypt_packet_tls13(session,
+					 _mbuffer_get_udata_ptr(bufel),
+					 _mbuffer_get_udata_size
+					 (bufel), &plaintext, min_pad, type,
+					 params);
+	else
+		ret =
+		    encrypt_packet(session,
+				   _mbuffer_get_udata_ptr(bufel),
+				   _mbuffer_get_udata_size
+				   (bufel), &plaintext, min_pad, type,
+				   params);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -105,18 +132,25 @@ int
 _gnutls_decrypt(gnutls_session_t session,
 		gnutls_datum_t * ciphertext,
 		gnutls_datum_t * output,
-		content_type_t type,
+		content_type_t *type,
 		record_parameters_st * params, gnutls_uint64 * sequence)
 {
 	int ret;
+	const version_entry_st *vers = get_version(session);
 
 	if (ciphertext->size == 0)
 		return 0;
 
-	ret =
-	    decrypt_packet(session, ciphertext,
-				     output, type, params,
-				     sequence);
+	if (vers && vers->tls13_sem)
+		ret =
+		    decrypt_packet_tls13(session, ciphertext,
+					 output, type, params,
+					 sequence);
+	else
+		ret =
+		    decrypt_packet(session, ciphertext,
+				   output, *type, params,
+				   sequence);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -228,7 +262,7 @@ encrypt_packet(gnutls_session_t session,
 	int explicit_iv = _gnutls_version_has_explicit_iv(ver);
 	int auth_cipher =
 	    _gnutls_auth_cipher_is_aead(&params->write.cipher_state);
-	uint8_t nonce[MAX_CIPHER_BLOCK_SIZE];
+	uint8_t nonce[MAX_CIPHER_IV_SIZE];
 	unsigned imp_iv_size = 0, exp_iv_size = 0;
 	bool etm = 0;
 
@@ -378,6 +412,91 @@ encrypt_packet(gnutls_session_t session,
 	return length;
 }
 
+static int
+encrypt_packet_tls13(gnutls_session_t session,
+		     uint8_t * cipher_data, int cipher_size,
+		     gnutls_datum_t * plain,
+		     size_t min_pad,
+		     content_type_t type,
+		     record_parameters_st * params)
+{
+	int length, ret;
+	uint8_t preamble[MAX_PREAMBLE_SIZE];
+	int preamble_size;
+	int tag_size =
+	    _gnutls_auth_cipher_tag_len(&params->write.cipher_state);
+	const version_entry_st *ver = get_version(session);
+	uint8_t nonce[MAX_CIPHER_IV_SIZE];
+	unsigned iv_size = 0;
+	uint8_t *fdata;
+	size_t fdata_size, max;
+
+	if (unlikely(ver == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	_gnutls_hard_log("ENC[%p]: cipher: %s, MAC: %s, Epoch: %u\n",
+			 session, _gnutls_cipher_get_name(params->cipher),
+			 _gnutls_mac_get_name(params->mac),
+			 (unsigned int) params->epoch);
+
+	iv_size = _gnutls_cipher_get_iv_size(params->cipher);
+
+	length =
+	    calc_enc_length_stream(session, plain->size,
+				   tag_size, 1, 0);
+	if (length < 0)
+		return gnutls_assert_val(length);
+
+	/* copy the encrypted data to cipher_data.
+	 */
+	if (cipher_size < length)
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	if (unlikely(params->write.IV.size != iv_size || iv_size < 8))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	memcpy(nonce, params->write.IV.data, params->write.IV.size);
+	memxor(&nonce[iv_size-8], UINT64DATA(params->write.sequence_number), 8);
+
+	ret = plain->size;
+
+	preamble_size =
+	    make_preamble(UINT64DATA(params->write.sequence_number),
+			  type, ret, ver, preamble);
+
+	max = MAX_RECORD_SEND_SIZE(session);
+
+	/* make TLS 1.3 form of data */
+	fdata_size = plain->size + 1 + min_pad;
+
+	/* check whether padding would exceed max */
+	if (fdata_size > max) {
+		min_pad = max - plain->size - 1;
+		fdata_size = max;
+	}
+
+	fdata = gnutls_malloc(fdata_size);
+	if (fdata == NULL)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+	memcpy(fdata, plain->data, plain->size);
+	fdata[plain->size] = type;
+	memset(&fdata[plain->size+1], 0, min_pad);
+
+	ret = _gnutls_aead_cipher_encrypt(&params->write.cipher_state.cipher,
+					  nonce, iv_size,
+					  preamble, preamble_size,
+					  tag_size,
+					  fdata, fdata_size,
+					  cipher_data, cipher_size);
+	gnutls_free(fdata);
+
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	return length;
+}
+
 static void dummy_wait(record_parameters_st * params,
 		       gnutls_datum_t * plaintext, unsigned pad_failed,
 		       unsigned int pad, unsigned total)
@@ -419,13 +538,13 @@ static void dummy_wait(record_parameters_st * params,
  */
 static int
 decrypt_packet(gnutls_session_t session,
-			 gnutls_datum_t * ciphertext,
-			 gnutls_datum_t * plain,
-			 uint8_t type, record_parameters_st * params,
-			 gnutls_uint64 * sequence)
+		gnutls_datum_t * ciphertext,
+		gnutls_datum_t * plain,
+		content_type_t type, record_parameters_st * params,
+		gnutls_uint64 * sequence)
 {
 	uint8_t tag[MAX_HASH_SIZE];
-	uint8_t nonce[MAX_CIPHER_BLOCK_SIZE];
+	uint8_t nonce[MAX_CIPHER_IV_SIZE];
 	const uint8_t *tag_ptr = NULL;
 	unsigned int pad = 0, i;
 	int length, length_to_decrypt;
@@ -752,6 +871,92 @@ decrypt_packet(gnutls_session_t session,
 			return gnutls_assert_val(GNUTLS_E_DECRYPTION_FAILED);
 		}
 	}
+
+	return length;
+}
+
+static int
+decrypt_packet_tls13(gnutls_session_t session,
+		     gnutls_datum_t * ciphertext,
+		     gnutls_datum_t * plain,
+		     content_type_t *type, record_parameters_st * params,
+		     gnutls_uint64 * sequence)
+{
+	uint8_t nonce[MAX_CIPHER_IV_SIZE];
+	int length, length_to_decrypt;
+	int ret;
+	uint8_t preamble[MAX_PREAMBLE_SIZE];
+	unsigned int preamble_size = 0;
+	const version_entry_st *ver = get_version(session);
+	unsigned int tag_size =
+	    _gnutls_auth_cipher_tag_len(&params->read.cipher_state);
+	unsigned iv_size;
+	unsigned j;
+	volatile unsigned length_set;
+
+	if (unlikely(ver == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	iv_size = _gnutls_cipher_get_iv_size(params->cipher);
+
+	/* The way AEAD ciphers are defined in RFC5246, it allows
+	 * only stream ciphers.
+	 */
+	if (unlikely(ciphertext->size < tag_size))
+		return gnutls_assert_val(GNUTLS_E_DECRYPTION_FAILED);
+
+	if (unlikely(params->read.IV.size != iv_size || iv_size < 8))
+		return gnutls_assert_val(GNUTLS_E_DECRYPTION_FAILED);
+
+	memcpy(nonce, params->read.IV.data, params->read.IV.size);
+	memxor(&nonce[iv_size-8], UINT64DATA(*sequence), 8);
+
+	length =
+	    ciphertext->size - tag_size;
+
+	length_to_decrypt = ciphertext->size;
+
+	/* Pass the type, version, length and plain through
+	 * MAC.
+	 */
+	preamble_size =
+	    make_preamble(UINT64DATA(*sequence), *type,
+			  length, ver, preamble);
+
+	if (unlikely
+	    ((unsigned) length_to_decrypt > plain->size)) {
+			_gnutls_audit_log(session,
+				  "Received %u bytes, while expecting less than %u\n",
+				  (unsigned int) length_to_decrypt,
+				  (unsigned int) plain->size);
+		return
+		    gnutls_assert_val(GNUTLS_E_DECRYPTION_FAILED);
+	}
+
+	ret = _gnutls_aead_cipher_decrypt(&params->read.cipher_state.cipher,
+					  nonce, iv_size,
+					  preamble, preamble_size,
+					  tag_size,
+					  ciphertext->data, length_to_decrypt,
+					  plain->data, plain->size);
+	if (unlikely(ret < 0))
+		return gnutls_assert_val(ret);
+
+	length_set = 0;
+
+	/* now figure the actual data size. We intentionally iterate through all data,
+	 * to avoid leaking the padding length due to timeing differences in processing.
+	 */
+	for (j=length-1;j>0;j--) {
+		if (plain->data[j]!=0 && length_set == 0) {
+			*type = plain->data[j];
+			length = j;
+			length_set = 1;
+		}
+	}
+
+	if (!length_set)
+		return gnutls_assert_val(GNUTLS_E_DECRYPTION_FAILED);
 
 	return length;
 }

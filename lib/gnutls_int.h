@@ -122,6 +122,8 @@ typedef struct {
 #define MAX_CIPHER_BLOCK_SIZE 16
 #define MAX_CIPHER_KEY_SIZE 32
 
+#define MAX_CIPHER_IV_SIZE 16
+
 #define MAX_USERNAME_SIZE 128
 #define MAX_SERVER_NAME_SIZE 256
 

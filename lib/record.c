@@ -430,6 +430,7 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 	record_parameters_st *record_params;
 	size_t max_send_size;
 	record_state_st *record_state;
+	const version_entry_st *vers = get_version(session);
 
 	ret = _gnutls_epoch_get(session, epoch_rel, &record_params);
 	if (ret < 0)
@@ -494,7 +495,10 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
 
 		headers = _mbuffer_get_uhead_ptr(bufel);
-		headers[0] = type;
+		if (vers->tls13_sem)
+			headers[0] = GNUTLS_APPLICATION_DATA;
+		else
+			headers[0] = type;
 
 		/* Use the default record version, if it is
 		 * set. */
@@ -1238,7 +1242,7 @@ _gnutls_recv_in_buffers(gnutls_session_t session, content_type_t type,
 	t.size = _mbuffer_get_udata_size(decrypted);
 	ret =
 	    _gnutls_decrypt(session, &ciphertext, &t,
-			    record.type, record_params, packet_sequence);
+			    &record.type, record_params, packet_sequence);
 	if (ret >= 0)
 		_mbuffer_set_udata_size(decrypted, ret);
 

@@ -111,4 +111,16 @@ int _gnutls_send_finished(gnutls_session_t session, int again);
 int _gnutls_tls13_handshake_client(gnutls_session_t session);
 int _gnutls_tls13_handshake_server(gnutls_session_t session);
 
+#define EARLY_TRAFFIC_LABEL "c e traffic"
+#define EXT_BINDER_LABEL "ext binder"
+#define RES_BINDER_LABEL "res binder"
+#define EARLY_EXPORTER_LABEL "e exp master"
+#define HANDSHAKE_CLIENT_TRAFFIC_LABEL "c hs traffic"
+#define HANDSHAKE_SERVER_TRAFFIC_LABEL "s hs traffic"
+#define DERIVED_LABEL "derived"
+#define APPLICATION_CLIENT_TRAFFIC_LABEL "c ap traffic"
+#define APPLICATION_SERVER_TRAFFIC_LABEL "s ap traffic"
+#define EXPORTER_LABEL "exp master"
+#define RES_LABEL "res master"
+
 #endif

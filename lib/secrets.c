@@ -52,10 +52,12 @@ int _tls13_update_secret(gnutls_session_t session, const uint8_t *key, size_t ke
 				session->key.temp_secret);
 }
 
-int _tls13_derive_secret(gnutls_session_t session,
-			  const char *label, unsigned label_size,
-			  const uint8_t *msg, size_t msg_size,
-			  void *out)
+int _tls13_expand_secret(gnutls_session_t session,
+			 const char *label, unsigned label_size,
+			 const uint8_t *msg, size_t msg_size,
+			 const uint8_t secret[MAX_CIPHER_KEY_SIZE],
+			 unsigned out_size,
+			 void *out)
 {
 	uint8_t tmp[256] = "tls13 ";
 	unsigned digest_size;
@@ -69,7 +71,7 @@ int _tls13_derive_secret(gnutls_session_t session,
 
 	_gnutls_buffer_init(&str);
 
-	ret = _gnutls_buffer_append_prefix(&str, 16, digest_size);
+	ret = _gnutls_buffer_append_prefix(&str, 16, out_size);
 	if (ret < 0) {
 		gnutls_assert();
 		goto cleanup;
@@ -99,19 +101,19 @@ int _tls13_derive_secret(gnutls_session_t session,
 	case GNUTLS_MAC_SHA256:{
 		struct hmac_sha256_ctx ctx;
 
-		hmac_sha256_set_key(&ctx, SHA256_DIGEST_SIZE, session->key.temp_secret);
+		hmac_sha256_set_key(&ctx, SHA256_DIGEST_SIZE, secret);
 		hkdf_expand(&ctx, (nettle_hash_update_func*)hmac_sha256_update,
 			(nettle_hash_digest_func*)hmac_sha256_digest, SHA256_DIGEST_SIZE,
-			str.length, str.data, SHA256_DIGEST_SIZE, out);
+			str.length, str.data, out_size, out);
 		break;
 	}
 	case GNUTLS_MAC_SHA384:{
 		struct hmac_sha384_ctx ctx;
 
-		hmac_sha384_set_key(&ctx, SHA384_DIGEST_SIZE, session->key.temp_secret);
+		hmac_sha384_set_key(&ctx, SHA384_DIGEST_SIZE, secret);
 		hkdf_expand(&ctx, (nettle_hash_update_func*)hmac_sha384_update,
 			(nettle_hash_digest_func*)hmac_sha384_digest, SHA384_DIGEST_SIZE,
-			str.length, str.data, SHA384_DIGEST_SIZE, out);
+			str.length, str.data, out_size, out);
 		break;
 	}
 	default:
@@ -124,4 +126,15 @@ int _tls13_derive_secret(gnutls_session_t session,
  cleanup:
 	_gnutls_buffer_clear(&str);
 	return ret;
+}
+
+int _tls13_derive_secret(gnutls_session_t session,
+			 const char *label, unsigned label_size,
+			 const uint8_t *msg, size_t msg_size,
+			 void *out)
+{
+	return _tls13_expand_secret(session, label, label_size, msg, msg_size,
+				    session->key.temp_secret,
+				    gnutls_hmac_get_len(session->security_parameters.prf_mac),
+				    out);
 }

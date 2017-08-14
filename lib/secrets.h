@@ -30,4 +30,11 @@ int _tls13_derive_secret(gnutls_session_t session,
 			  const uint8_t *msg, size_t msg_size,
 			  void *out /* of enough length to hold PRF MAC */);
 
+int _tls13_expand_secret(gnutls_session_t session,
+			 const char *label, unsigned label_size,
+			 const uint8_t *msg, size_t msg_size,
+			 const uint8_t secret[MAX_CIPHER_KEY_SIZE],
+			 unsigned out_size,
+			 void *out);
+
 #endif

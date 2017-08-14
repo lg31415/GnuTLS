@@ -53,6 +53,7 @@
 #include <auth/psk.h>		/* for gnutls_psk_server_credentials_t */
 #include <random.h>
 #include <dtls.h>
+#include "secrets.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -1573,7 +1574,17 @@ read_server_hello(gnutls_session_t session,
 	}
 	pos += 2;
 
-	if (!vers->tls13_sem) {
+	if (vers->tls13_sem) {
+		/* TLS 1.3 Early Secret */
+		ret = _tls13_init_secret(session, NULL, 0);
+		if (ret < 0)
+			return gnutls_assert_val(ret);
+
+		ret = _tls13_derive_secret(session, DERIVED_LABEL, sizeof(DERIVED_LABEL)-1,
+					   NULL, 0, session->key.temp_secret);
+		if (ret < 0)
+			return gnutls_assert_val(ret);
+	} else {
 		/* move to compression
 		 */
 		DECR_LEN(len, 1);
@@ -1860,6 +1871,15 @@ static int send_server_hello(gnutls_session_t session, int again)
 		if (unlikely(vers == NULL))
 			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
+		if (vers->tls13_sem) {
+			/* TLS 1.3 Early Secret */
+			ret = _tls13_init_secret(session, NULL, 0);
+			if (ret < 0) {
+				gnutls_assert();
+				goto fail;
+			}
+		}
+
 		ret =
 		    _gnutls_gen_extensions(session, &extdata,
 					   (session->internals.resumed ==
@@ -1920,6 +1940,15 @@ static int send_server_hello(gnutls_session_t session, int again)
 
 		if (extdata.length > 0) {
 			memcpy(&data[pos], extdata.data, extdata.length);
+		}
+
+		if (vers->tls13_sem) {
+			ret = _tls13_derive_secret(session, DERIVED_LABEL, sizeof(DERIVED_LABEL)-1,
+						   NULL, 0, session->key.temp_secret);
+			if (ret < 0) {
+				gnutls_assert();
+				goto fail;
+			}
 		}
 	}
 

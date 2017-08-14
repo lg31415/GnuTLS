@@ -36,6 +36,8 @@
 #include <extensions.h>
 #include <buffers.h>
 #include "dtls.h"
+#include "secrets.h"
+#include "handshake.h"
 
 static const char keyexp[] = "key expansion";
 static const int keyexp_length = sizeof(keyexp) - 1;
@@ -91,7 +93,7 @@ _gnutls_set_keys(gnutls_session_t session, record_parameters_st * params,
 		    (session->security_parameters.master_secret,
 		     GNUTLS_MASTER_SIZE, rnd, 2 * GNUTLS_RANDOM_SIZE,
 		     block_size, key_block);
-	} else /* TLS 1.0+ */
+	} else { /* TLS 1.0+ */
 #endif
 		ret =
 		    _gnutls_PRF(session,
@@ -99,6 +101,7 @@ _gnutls_set_keys(gnutls_session_t session, record_parameters_st * params,
 				GNUTLS_MASTER_SIZE, keyexp, keyexp_length,
 				rnd, 2 * GNUTLS_RANDOM_SIZE, block_size,
 				key_block);
+	}
 
 	if (ret < 0)
 		return gnutls_assert_val(ret);
@@ -187,6 +190,107 @@ _gnutls_set_keys(gnutls_session_t session, record_parameters_st * params,
 				 server_write->IV.size,
 				 _gnutls_bin2hex(server_write->IV.data,
 						 server_write->IV.size,
+						 buf, sizeof(buf), NULL));
+	}
+
+	return 0;
+}
+
+static int
+_tls13_set_keys(gnutls_session_t session, record_parameters_st * params,
+		unsigned iv_size, unsigned key_size)
+{
+	uint8_t hs_ckey[MAX_HASH_SIZE];
+	uint8_t hs_skey[MAX_HASH_SIZE];
+	uint8_t ckey_block[MAX_CIPHER_KEY_SIZE];
+	uint8_t civ_block[MAX_CIPHER_IV_SIZE];
+	uint8_t skey_block[MAX_CIPHER_KEY_SIZE];
+	uint8_t siv_block[MAX_CIPHER_IV_SIZE];
+	char buf[65];
+	record_state_st *client_write, *server_write;
+	int ret;
+
+	ret = _tls13_derive_secret(session, HANDSHAKE_SERVER_TRAFFIC_LABEL, sizeof(HANDSHAKE_SERVER_TRAFFIC_LABEL)-1,
+				   session->internals.handshake_hash_buffer.data,
+				   session->internals.handshake_hash_buffer.length, hs_skey);
+
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	ret = _tls13_derive_secret(session, HANDSHAKE_CLIENT_TRAFFIC_LABEL, sizeof(HANDSHAKE_CLIENT_TRAFFIC_LABEL)-1,
+				   session->internals.handshake_hash_buffer.data,
+				   session->internals.handshake_hash_buffer.length, hs_ckey);
+
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	/* client keys */
+	ret = _tls13_expand_secret(session, "key", 3, NULL, 0, hs_ckey, key_size, ckey_block);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	ret = _tls13_expand_secret(session, "iv", 2, NULL, 0, hs_ckey, iv_size, civ_block);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	/* server keys */
+	ret = _tls13_expand_secret(session, "key", 3, NULL, 0, hs_skey, key_size, skey_block);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	ret = _tls13_expand_secret(session, "iv", 2, NULL, 0, hs_skey, iv_size, siv_block);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	if (session->security_parameters.entity == GNUTLS_CLIENT) {
+		client_write = &params->write;
+		server_write = &params->read;
+	} else {
+		client_write = &params->read;
+		server_write = &params->write;
+	}
+
+	client_write->mac_secret.data = NULL;
+	client_write->mac_secret.size = 0;
+
+	server_write->mac_secret.data = NULL;
+	server_write->mac_secret.size = 0;
+
+	ret = _gnutls_set_datum(&client_write->key, ckey_block, key_size);
+	if (ret < 0)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+	_gnutls_hard_log("INT: CLIENT WRITE KEY [%d]: %s\n",
+			 key_size,
+			 _gnutls_bin2hex(ckey_block, key_size,
+					 buf, sizeof(buf), NULL));
+
+	ret = _gnutls_set_datum(&server_write->key, skey_block, key_size);
+	if (ret < 0)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+	_gnutls_hard_log("INT: SERVER WRITE KEY [%d]: %s\n",
+			 key_size,
+			 _gnutls_bin2hex(skey_block, key_size,
+					 buf, sizeof(buf), NULL));
+
+	if (iv_size > 0) {
+		ret = _gnutls_set_datum(&client_write->IV, civ_block, iv_size);
+		if (ret < 0)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+		_gnutls_hard_log("INT: CLIENT WRITE IV [%d]: %s\n",
+				 key_size,
+				 _gnutls_bin2hex(civ_block, key_size,
+						 buf, sizeof(buf), NULL));
+
+		ret = _gnutls_set_datum(&server_write->IV, siv_block, iv_size);
+		if (ret < 0)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+		_gnutls_hard_log("INT: SERVER WRITE IV [%d]: %s\n",
+				 key_size,
+				 _gnutls_bin2hex(siv_block, key_size,
 						 buf, sizeof(buf), NULL));
 	}
 
@@ -303,19 +407,23 @@ int _gnutls_epoch_set_keys(gnutls_session_t session, uint16_t epoch)
 	    || _gnutls_mac_is_ok(params->mac) == 0)
 		return gnutls_assert_val(GNUTLS_E_UNWANTED_ALGORITHM);
 
-	if (!_gnutls_version_has_explicit_iv(ver) &&
-	    _gnutls_cipher_type(params->cipher) == CIPHER_BLOCK) {
-		IV_size = _gnutls_cipher_get_iv_size(params->cipher);
-	} else {
+	if (_gnutls_version_has_explicit_iv(ver) &&
+	    (_gnutls_cipher_type(params->cipher) != CIPHER_BLOCK)) {
 		IV_size = _gnutls_cipher_get_implicit_iv_size(params->cipher);
+	} else {
+		IV_size = _gnutls_cipher_get_iv_size(params->cipher);
 	}
 
 	key_size = _gnutls_cipher_get_key_size(params->cipher);
 	hash_size = _gnutls_mac_get_key_size(params->mac);
 	params->etm = session->security_parameters.etm;
 
-	ret = _gnutls_set_keys
-	    (session, params, hash_size, IV_size, key_size);
+	if (ver->tls13_sem)
+		ret = _tls13_set_keys
+		    (session, params, IV_size, key_size);
+	else
+		ret = _gnutls_set_keys
+		    (session, params, hash_size, IV_size, key_size);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -642,4 +750,24 @@ _gnutls_epoch_free(gnutls_session_t session, record_parameters_st * params)
 	free_record_state(&params->write, 0);
 
 	gnutls_free(params);
+}
+
+int _tls13_connection_state_init(gnutls_session_t session)
+{
+	const uint16_t epoch_next =
+	    session->security_parameters.epoch_next;
+	int ret;
+
+	ret = _gnutls_epoch_set_keys(session, epoch_next);
+	if (ret < 0)
+		return ret;
+
+	_gnutls_handshake_log("HSK[%p]: Cipher Suite: %s\n",
+			      session,
+			      session->security_parameters.cs->name);
+
+	session->security_parameters.epoch_read = epoch_next;
+	session->security_parameters.epoch_write = epoch_next;
+
+	return 0;
 }

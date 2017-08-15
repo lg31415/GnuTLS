@@ -489,16 +489,20 @@ key_share_recv_params(gnutls_session_t session,
 	ssize_t size;
 	unsigned gid, used_share = 0;
 	const version_entry_st *ver;
-	const gnutls_group_entry_st *group;
+	const gnutls_group_entry_st *group, *sgroup;
 
 	if (session->security_parameters.entity == GNUTLS_SERVER) {
 		ver = get_version(session);
 		if (unlikely(ver == NULL || ver->key_shares == 0))
 			return gnutls_assert_val(0);
 
+		sgroup = get_group(session);
+
 		DECR_LEN(data_size, 2);
 		size = _gnutls_read_uint16(data);
 		data += 2;
+
+		_gnutls_handshake_log("EXT[%p]: Selected group %s\n", session, sgroup?sgroup->name:"null");
 
 		if (data_size != size)
 			return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET_LENGTH);
@@ -517,7 +521,11 @@ key_share_recv_params(gnutls_session_t session,
 			/* at this point we have already negotiated a group;
 			 * find the group's share. */
 			group = _gnutls_tls_id_to_group(gid);
-			if (group == NULL || group != get_group(session)) {
+
+			if (group != NULL)
+				_gnutls_handshake_log("EXT[%p]: Received key share for %s\n", session, group->name);
+
+			if (group == NULL || group != sgroup) {
 				data += size;
 				continue;
 			}
@@ -559,7 +567,7 @@ key_share_recv_params(gnutls_session_t session,
 		/* check if we support it */
 		ret = _gnutls_session_supports_group(session, group->id);
 		if (ret < 0) {
-			_gnutls_debug_log("received share for %s which is disabled\n", group->name);
+			_gnutls_handshake_log("EXT[%p]: received share for %s which is disabled\n", session, group->name);
 			return gnutls_assert_val(ret);
 		}
 

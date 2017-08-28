@@ -129,6 +129,26 @@ unsigned opt_to_flags(common_info_st *cinfo, unsigned *key_usage)
 	return flags;
 }
 
+static const char *find_spy(void) {
+	const char *p = LIBDIR"/pkcs11-spy.so";
+	if (access(p, X_OK) == 0)
+		return p;
+
+	p = LIBDIR"/pkcs11/pkcs11-spy.so";
+	if (access(p, X_OK) == 0)
+		return p;
+
+	p = "/usr/lib64/pkcs11/pkcs11-spy.so";
+	if (access(p, X_OK) == 0)
+		return p;
+
+	p = "/usr/lib/pkcs11/pkcs11-spy.so";
+	if (access(p, X_OK) == 0)
+		return p;
+
+	return NULL;
+}
+
 static void cmd_parser(int argc, char **argv)
 {
 	int ret, debug = 0;
@@ -165,21 +185,32 @@ static void cmd_parser(int argc, char **argv)
 
 	if (HAVE_OPT(PROVIDER)) {
 		const char *params = NULL;
+		const char *provider = OPT_ARG(PROVIDER);
+
+		if (HAVE_OPT(SPY)) {
+			setenv("PKCS11SPY_OUTPUT", OPT_ARG(SPY), 1);
+			setenv("PKCS11SPY", provider, 1);
+			provider = find_spy();
+			if (provider == NULL) {
+				fprintf(stderr, "Cannot find pkcs11-spy.so in any of the default paths\n");
+				app_exit(1);
+			}
+		}
 
 		if (HAVE_OPT(PROVIDER_OPTS))
 			params = OPT_ARG(PROVIDER_OPTS);
 
 		ret = gnutls_pkcs11_init(GNUTLS_PKCS11_FLAG_MANUAL, NULL);
-		if (ret < 0)
+		if (ret < 0) {
 			fprintf(stderr, "pkcs11_init: %s\n",
 				gnutls_strerror(ret));
-		else {
+		} else {
 			ret =
-			    gnutls_pkcs11_add_provider(OPT_ARG(PROVIDER),
+			    gnutls_pkcs11_add_provider(provider,
 						       params);
 			if (ret < 0) {
-				fprintf(stderr, "pkcs11_add_provider: %s\n",
-					gnutls_strerror(ret));
+				fprintf(stderr, "pkcs11_add_provider: %s: %s\n",
+					provider, gnutls_strerror(ret));
 				app_exit(1);
 			}
 		}

@@ -487,6 +487,15 @@ flag = {
 };
 
 flag = {
+    name      = spy;
+    arg-type  = string;
+    descrip   = "Specify filename to store PKCS#11 operation log";
+    doc      = "This utilizes pkcs11-spy module, which should be
+    installed. This option is only valid when combined with --provider.";
+    flags-must = provider;
+};
+
+flag = {
     name      = provider-opts;
     arg-type  = string;
     descrip   = "Specify parameters for the PKCS #11 provider library";

@@ -38,6 +38,7 @@ AM_CPPFLAGS = \
 	-I$(srcdir)/../lib/includes		\
 	-I$(srcdir)/../libdane/includes		\
 	-I$(srcdir)/../extra/includes	\
+	-DLIBDIR=\"$(libdir)\" \
 	$(LIBOPTS_CFLAGS)
 
 if NEED_LIBOPTS

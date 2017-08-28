@@ -318,7 +318,7 @@ dist_check_SCRIPTS += fastopen.sh pkgconfig.sh starttls.sh starttls-ftp.sh start
 
 
 if ENABLE_PKCS11
-dist_check_SCRIPTS += p11-kit-trust.sh
+dist_check_SCRIPTS += p11-kit-trust.sh p11tool.sh
 endif
 if ENABLE_DANE
 dist_check_SCRIPTS += danetool.sh

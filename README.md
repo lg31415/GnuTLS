@@ -45,6 +45,7 @@ We require several tools to check out and build the software, including:
 * [bison](http://www.gnu.org/software/bison) (for datetime parser in certtool)
 * [libunbound](https://unbound.net/) (for DANE support)
 * [abi-compliance-checker](http://ispras.linuxbase.org/index.php/ABI_compliance_checker) (for make dist)
+* [opensc](https://github.com/OpenSC/OpenSC) (for pkcs11-spy)
 
 The required software is typically distributed with your operating
 system, and the instructions for installing them differ.  Here are
@@ -54,7 +55,7 @@ Debian/Ubuntu:
 ```
 apt-get install -y git-core autoconf libtool gettext autopoint
 apt-get install -y automake autogen nettle-dev libp11-kit-dev libtspi-dev libunistring-dev
-apt-get install -y guile-2.0-dev libtasn1-6-dev libidn2-0-dev gawk gperf
+apt-get install -y guile-2.0-dev libtasn1-6-dev libidn2-0-dev gawk gperf opensc
 apt-get install -y libunbound-dev dns-root-data bison help2man gtk-doc-tools
 apt-get install -y texinfo texlive texlive-generic-recommended texlive-extra-utils
 ```
@@ -63,7 +64,7 @@ Fedora/RHEL:
 ```
 yum install -y git autoconf libtool gettext-devel automake autogen
 yum install -y nettle-devel p11-kit-devel autogen-libopts-devel libunistring-devel
-yum install -y trousers-devel guile-devel libtasn1-devel libidn2-devel gawk gperf
+yum install -y trousers-devel guile-devel libtasn1-devel libidn2-devel gawk gperf opensc
 yum install -y libtasn1-tools unbound-devel bison help2man gtk-doc texinfo texlive
 ```
 
@@ -72,7 +73,7 @@ Nettle, P11-kit and Autogen, which you will need to build from sources.
 
 Dependencies that are used during make check or make dist are listed below.
 Moreover, for basic interoperability testing you may want to install openssl
-and polarssl.
+and mbedtls (former polarssl).
 
 * [Valgrind](http://valgrind.org/) (optional)
 * [Libasan](https://gcc.gnu.org//) (optional)

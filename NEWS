@@ -15,6 +15,12 @@ See the end for copying conditions.
    SHA1. They will now sign with an algorithm that corresponds to the security
    level of the signer's key.
 
+** libgnutls: Removed the camellia (GCM and CBC) ciphersuites from the default priority sets.
+   There are already the AES-CCM and CHACHA20-POLY1305 ciphersuites as AES-GCM backup,
+   and the camellia ciphersuites are not widespread to justify keeping them.
+   That way we reduce the number of the ciphersuites sent, which also allows connections
+   to few broken servers which require a low number of ciphersuites.
+
 ** libgnutls: gnutls_x509_*_sign2() functions and gnutls_x509_*_privkey_sign()
    accept GNUTLS_DIG_UNKNOWN (0) as a hash function option. That will signal
    the function to auto-detect an appropriate hash algorithm to use.

@@ -10,6 +10,12 @@ See the end for copying conditions.
 ** libgnutls: Fixed interoperability issue with openssl when safe renegotiation was
    used. Resolves gitlab issue #259.
 
+** libgnutls: Removed the camellia GCM ciphersuites from the default priority sets.
+   There are already the CCM and CHACHA20-POLY1305 ciphersuites as AES-GCM backup,
+   and the camellia-gcm ciphersuites are not widespread to justify keeping them.
+   That way we reduce the number of the ciphersuites sent to 49, and allow connections
+   to few broken servers which require a low number of ciphersuites.
+
 ** p11tool: The options --set-pin and --set-so-pin can be used with all operations
    not only with --initialize.
 

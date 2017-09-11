@@ -64,82 +64,57 @@ int _gnutls_tls13_handshake_client(gnutls_session_t session)
 
 	switch (STATE) {
 	case STATE100:
-		/* RECV CERTIFICATE */
-		if (session->internals.resumed == RESUME_FALSE)	/* if we are not resuming */
-			ret = _gnutls_recv_server_certificate(session);
+		ret =
+		    generate_hs_traffic_keys(session);
 		STATE = STATE100;
-		IMED_RET("recv server certificate", ret, 1);
+		IMED_RET("generate session keys", ret, 0);
 		/* fall through */
 	case STATE101:
-#ifdef ENABLE_OCSP
-		/* RECV CERTIFICATE STATUS */
-		if (session->internals.resumed == RESUME_FALSE)	/* if we are not resuming */
-			ret =
-			    _gnutls_recv_server_certificate_status
-			    (session);
+		/* RECV encrypted extensions */
+		ret = _gnutls13_recv_encrypted_extensions(session);
 		STATE = STATE101;
-		IMED_RET("recv server certificate", ret, 1);
-#endif
+		IMED_RET("recv server encrypted extensions", ret, 0);
 		/* fall through */
 	case STATE102:
-		ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
+		ret =
+		    _gnutls13_recv_server_certificate_request(session);
 		STATE = STATE102;
+		IMED_RET("recv server certificate request", ret, 0);
+		/* fall through */
+	case STATE103:
+		/* RECV CERTIFICATE */
+		ret = _gnutls13_recv_server_certificate(session);
+		STATE = STATE103;
+		IMED_RET("recv server certificate", ret, 0);
+		/* fall through */
+	case STATE104:
+		ret =
+		    _gnutls13_recv_server_certificate_verify(session);
+		STATE = STATE104;
+		IMED_RET("recv server certificate verify", ret, 0);
+		/* fall through */
+	case STATE105:
+		ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
+		STATE = STATE105;
 		if (ret < 0)
 			return gnutls_assert_val(ret);
 
 		FALLTHROUGH;
-	case STATE103:
-		/* receive the server certificate request - if any 
-		 */
-		ret = _gnutls_recv_server_crt_request(session);
-		STATE = STATE103;
-		IMED_RET("recv server certificate request message", ret,
-			 1);
+	case STATE109:
+		ret = _gnutls_recv_finished(session);
+		STATE = STATE109;
+		IMED_RET("recv finished", ret, 0);
 		/* fall through */
-	case STATE104:
-		/* receive the server hello done */
-		ret =
-		    _gnutls_recv_handshake(session,
-					   GNUTLS_HANDSHAKE_SERVER_HELLO_DONE,
-					   0, NULL);
-		STATE = STATE104;
-		IMED_RET("recv server hello done", ret, 1);
-		/* fall through */
-	case STATE105:
-		/* send our certificate - if any and if requested
-		 */
-		ret =
-		    _gnutls_send_client_certificate(session,
-						    AGAIN
-						    (STATE105));
-		STATE = STATE105;
-		IMED_RET("send client certificate", ret, 0);
-		/* fall through */
-	case STATE106:
-		/* send client certificate verify */
-		ret =
-		    _gnutls_send_client_certificate_verify(session,
-							   AGAIN
-							   (STATE106));
-		STATE = STATE106;
-		IMED_RET("send client certificate verify", ret, 1);
-		/* fall through */
-#if 0
-	case STATE107:
-		ret = send_handshake_final(session, TRUE);
-		STATE = STATE107;
-		IMED_RET("send handshake final 2", ret, 1);
-		/* fall through */
-	case STATE108:
-		STATE = STATE108;
+	case STATE110:
+		STATE = STATE110;
 
-		ret = recv_handshake_final(session, TRUE);
-		IMED_RET("recv handshake final", ret, 1);
-#endif
+		ret = _gnutls_send_finished(session);
+		IMED_RET("send finished", ret, 0);
+
 		STATE = STATE0;
-		/* fall through */
-	default:
 		break;
+	default:
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 	}
 
 	/* explicitly reset any false start flags */
@@ -209,7 +184,7 @@ int _gnutls_tls13_handshake_server(gnutls_session_t session)
 	case STATE103:
 		ret = _gnutls_recv_client_certificate(session);
 		STATE = STATE103;
-		IMED_RET("recv client certificate", ret, 1);
+		IMED_RET("recv client certificate", ret, 0);
 		/* fall through */
 	case STATE104:
 		ret = _gnutls_run_verify_callback(session, GNUTLS_SERVER);
@@ -223,7 +198,7 @@ int _gnutls_tls13_handshake_server(gnutls_session_t session)
 		    _gnutls_recv_client_certificate_verify_message
 		    (session);
 		STATE = STATE105;
-		IMED_RET("recv client certificate verify", ret, 1);
+		IMED_RET("recv client certificate verify", ret, 0);
 		/* fall through */
 
 		STATE = STATE0;

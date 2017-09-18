@@ -38,6 +38,7 @@
 #include "hash_int.h"
 #include "db.h"
 #include "extensions.h"
+#include "extv.h"
 #include "supplemental.h"
 #include "auth.h"
 #include "sslv2_compat.h"
@@ -79,7 +80,7 @@ handshake_hash_buffer_empty(gnutls_session_t session)
 
 	_gnutls_buffers_log("BUF[HSK]: Emptied buffer\n");
 
-	session->internals.used_exts_size = 0;
+	session->internals.hello_ext.used_exts_size = 0;
 	session->internals.handshake_hash_buffer_prev_len = 0;
 	session->internals.handshake_hash_buffer.length = 0;
 	return;
@@ -544,9 +545,11 @@ read_client_hello(gnutls_session_t session, uint8_t * data,
 	 * resumed ones.
 	 */
 	ret =
-	    _gnutls_parse_extensions(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
+	    _gnutls_extv_parse(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
 				     GNUTLS_EXT_MANDATORY,
-				     ext_ptr, ext_size);
+				     ext_ptr, ext_size,
+				     &session->internals.hello_ext,
+				     EXTV_SAVE_RECEIVED);
 	if (ret < 0) {
 		gnutls_assert();
 		return ret;
@@ -585,9 +588,11 @@ read_client_hello(gnutls_session_t session, uint8_t * data,
 	 * Unconditionally try to parse extensions; safe renegotiation uses them in
 	 * sslv3 and higher, even though sslv3 doesn't officially support them.
 	 */
-	ret = _gnutls_parse_extensions(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
+	ret = _gnutls_extv_parse(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
 				       GNUTLS_EXT_APPLICATION,
-				       ext_ptr, ext_size);
+				       ext_ptr, ext_size,
+				       &session->internals.hello_ext,
+				       EXTV_SAVE_RECEIVED);
 	/* len is the rest of the parsed length */
 	if (ret < 0) {
 		gnutls_assert();
@@ -603,8 +608,10 @@ read_client_hello(gnutls_session_t session, uint8_t * data,
 
 	/* Session tickets are parsed in this point */
 	ret =
-	    _gnutls_parse_extensions(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
-				     GNUTLS_EXT_TLS, ext_ptr, ext_size);
+	    _gnutls_extv_parse(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
+				     GNUTLS_EXT_TLS, ext_ptr, ext_size,
+				     &session->internals.hello_ext,
+				     EXTV_SAVE_RECEIVED);
 	if (ret < 0) {
 		gnutls_assert();
 		return ret;
@@ -658,8 +665,10 @@ read_client_hello(gnutls_session_t session, uint8_t * data,
 	/* call extensions that are intended to be parsed after the ciphersuite/cert
 	 * are known. */
 	ret =
-	    _gnutls_parse_extensions(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
-				     _GNUTLS_EXT_TLS_POST_CS, ext_ptr, ext_size);
+	    _gnutls_extv_parse(session, GNUTLS_EXT_FLAG_CLIENT_HELLO,
+				     _GNUTLS_EXT_TLS_POST_CS, ext_ptr, ext_size,
+				     &session->internals.hello_ext,
+				     EXTV_SAVE_RECEIVED);
 	if (ret < 0) {
 		gnutls_assert();
 		return ret;
@@ -1572,9 +1581,11 @@ read_server_hello(gnutls_session_t session,
 			DECR_LEN(len, 2 + 1);
 
 			ret =
-			    _gnutls_parse_extensions(session, GNUTLS_EXT_FLAG_TLS12_SERVER_HELLO,
+			    _gnutls_extv_parse(session, GNUTLS_EXT_FLAG_TLS12_SERVER_HELLO,
 						     GNUTLS_EXT_MANDATORY,
-						     &data[pos], len);
+						     &data[pos], len,
+						     &session->internals.hello_ext,
+						     EXTV_CHECK_UNADVERTIZED);
 			if (ret < 0) {
 				gnutls_assert();
 				return ret;
@@ -1610,34 +1621,42 @@ read_server_hello(gnutls_session_t session,
 	/* Parse extensions in order.
 	 */
 	ret =
-	    _gnutls_parse_extensions(session,
-				     ext_parse_flag,
-				     GNUTLS_EXT_MANDATORY,
-				     &data[pos], len);
+	    _gnutls_extv_parse(session,
+			       ext_parse_flag,
+			       GNUTLS_EXT_MANDATORY,
+			       &data[pos], len,
+			       &session->internals.hello_ext,
+			       EXTV_CHECK_UNADVERTIZED);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
 	ret =
-	    _gnutls_parse_extensions(session,
-				     ext_parse_flag,
-				     GNUTLS_EXT_APPLICATION,
-				     &data[pos], len);
+	    _gnutls_extv_parse(session,
+			       ext_parse_flag,
+			       GNUTLS_EXT_APPLICATION,
+			       &data[pos], len,
+			       &session->internals.hello_ext,
+			       EXTV_CHECK_UNADVERTIZED);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
 	ret =
-	    _gnutls_parse_extensions(session,
-				     ext_parse_flag,
-				     GNUTLS_EXT_TLS,
-				     &data[pos], len);
+	    _gnutls_extv_parse(session,
+			       ext_parse_flag,
+			       GNUTLS_EXT_TLS,
+			       &data[pos], len,
+			       &session->internals.hello_ext,
+			       EXTV_CHECK_UNADVERTIZED);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
 	ret =
-	    _gnutls_parse_extensions(session,
-				     ext_parse_flag,
-				     _GNUTLS_EXT_TLS_POST_CS,
-				     &data[pos], len);
+	    _gnutls_extv_parse(session,
+			       ext_parse_flag,
+			       _GNUTLS_EXT_TLS_POST_CS,
+			       &data[pos], len,
+			       &session->internals.hello_ext,
+			       EXTV_CHECK_UNADVERTIZED);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -1835,9 +1854,10 @@ static int send_client_hello(gnutls_session_t session, int again)
 			}
 
 			ret =
-			    _gnutls_gen_extensions(session, &extdata,
+			    _gnutls_extv_gen(session, &session->internals.hello_ext,
+						   &extdata,
 						   GNUTLS_EXT_FLAG_CLIENT_HELLO,
-						   type);
+						   type, 0);
 			if (ret < 0) {
 				gnutls_assert();
 				goto cleanup;
@@ -1900,12 +1920,13 @@ static int send_server_hello(gnutls_session_t session, int again)
 			ext_parse_flag = GNUTLS_EXT_FLAG_TLS12_SERVER_HELLO;
 
 		ret =
-		    _gnutls_gen_extensions(session, &extdata,
-					   ext_parse_flag,
-					   (session->internals.resumed ==
-					    RESUME_TRUE) ?
-					   GNUTLS_EXT_MANDATORY :
-					   GNUTLS_EXT_ANY);
+		    _gnutls_extv_gen(session, &session->internals.hello_ext,
+				     &extdata,
+				     ext_parse_flag,
+				     (session->internals.resumed == RESUME_TRUE) ?
+					GNUTLS_EXT_MANDATORY :
+					GNUTLS_EXT_ANY,
+				     EXTV_SEND_SAVED_ONLY);
 		if (ret < 0) {
 			gnutls_assert();
 			goto fail;
@@ -2250,7 +2271,7 @@ int gnutls_handshake(gnutls_session_t session)
 		if (ret < 0)
 			return gnutls_assert_val(ret);
 
-		session->internals.used_exts_size = 0;
+		session->internals.hello_ext.used_exts_size = 0;
 		session->internals.crt_requested = 0;
 		session->internals.handshake_in_progress = 1;
 		session->internals.vc_status = -1;

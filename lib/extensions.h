@@ -25,26 +25,20 @@
 
 #include <gnutls/gnutls.h>
 
-int _gnutls_parse_extensions(gnutls_session_t session,
-			     gnutls_ext_flags_t msg,
-			     gnutls_ext_parse_type_t parse_type,
-			     const uint8_t * data, int data_size);
-int _gnutls_gen_extensions(gnutls_session_t session,
-			   gnutls_buffer_st * extdata,
-			   gnutls_ext_flags_t msg,
-			   gnutls_ext_parse_type_t);
+
+/* Session and generic TLS extensions handling functions */
+
 int _gnutls_ext_init(void);
 void _gnutls_ext_deinit(void);
 
 void _gnutls_extension_list_add_sr(gnutls_session_t session);
-int _gnutls_extension_list_check(gnutls_session_t session, uint16_t type);
 
 void _gnutls_ext_free_session_data(gnutls_session_t session);
 
 /* functions to be used by extensions internally
  */
-void _gnutls_ext_unset_session_data(gnutls_session_t session,
-				    uint16_t type);
+void _gnutls_ext_unset_session_data(gnutls_session_t session, uint16_t id);
+
 void _gnutls_ext_set_session_data(gnutls_session_t session, uint16_t type,
 				  gnutls_ext_priv_data_t);
 int _gnutls_ext_get_session_data(gnutls_session_t session, uint16_t type,
@@ -117,5 +111,10 @@ typedef struct extension_entry_st {
 } extension_entry_st;
 
 int _gnutls_ext_register(extension_entry_st *);
+
+const extension_entry_st *
+_gnutls_ext_ptr(tls_ext_vals_st *v, uint16_t id, gnutls_ext_parse_type_t parse_type);
+
+extern extension_entry_st const *_gnutls_extfunc[];
 
 #endif

@@ -853,6 +853,26 @@ typedef struct tfo_st {
 	socklen_t connect_addrlen;
 } tfo_st;
 
+typedef struct tls_ext_vals_st
+{
+	/* In case of a client holds the extensions we sent to the peer;
+	 * otherwise the extensions we received from the client.
+	 */
+	const struct extension_entry_st *used_exts[MAX_EXT_TYPES];
+	unsigned used_exts_size;
+
+	struct extension_entry_st *rexts;
+	unsigned rexts_size;
+
+	struct ext_data_st {
+		uint16_t id;
+		gnutls_ext_priv_data_t priv;
+		gnutls_ext_priv_data_t resumed_priv;
+		uint8_t set;
+		uint8_t resumed_set;
+	} ext_data[MAX_EXT_TYPES];
+} tls_ext_vals_st;
+
 typedef struct {
 	/* holds all the parsed data received by the record layer */
 	mbuffer_head_st record_buffer;
@@ -1121,22 +1141,8 @@ typedef struct {
 	struct gnutls_supplemental_entry_st *rsup;
 	unsigned rsup_size;
 
-	struct extension_entry_st *rexts;
-	unsigned rexts_size;
-
-	struct {
-		uint16_t id;
-		gnutls_ext_priv_data_t priv;
-		gnutls_ext_priv_data_t resumed_priv;
-		uint8_t set;
-		uint8_t resumed_set;
-	} ext_data[MAX_EXT_TYPES];
-
-	/* In case of a client holds the extensions we sent to the peer;
-	 * otherwise the extensions we received from the client.
-	 */
-	const struct extension_entry_st *used_exts[MAX_EXT_TYPES];
-	unsigned used_exts_size;
+	/* extensions received during client or server hello */
+	tls_ext_vals_st hello_ext;
 
 	/* this is not the negotiated max_record_recv_size, but the actual maximum
 	 * receive size */

@@ -48,6 +48,7 @@
 #include "read-file.h"
 #include "system-keys.h"
 #include "urls.h"
+#include "extv.h"
 #ifdef _WIN32
 #include <wincrypt.h>
 #endif
@@ -235,7 +236,7 @@ _gnutls_ocsp_verify_mandatory_stapling(gnutls_session_t session,
 	 *
 	 * To proceed, first check whether we have requested the certificate status
 	 */
-	if (_gnutls_extension_list_check(session, GNUTLS_EXTENSION_STATUS_REQUEST) < 0) {
+	if (_gnutls_extv_check_saved(&session->internals.hello_ext, GNUTLS_EXTENSION_STATUS_REQUEST) < 0) {
 		return 0;
 	}
 

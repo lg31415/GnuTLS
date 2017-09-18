@@ -31,6 +31,7 @@
 #include <auth/anon.h>
 #include <auth/psk.h>
 #include <ext/safe_renegotiation.h>
+#include "extv.h"
 
 #ifndef ENABLE_SSL3
 # define GNUTLS_SSL3 GNUTLS_TLS1
@@ -1457,7 +1458,7 @@ _gnutls_figure_common_ciphersuite(gnutls_session_t session,
 	 * by RFC4492, probably to allow SSLv2 hellos negotiate elliptic curve
 	 * ciphersuites */
 	if (session->internals.cand_ec_group == NULL &&
-	    _gnutls_extension_list_check(session, GNUTLS_EXTENSION_SUPPORTED_ECC) < 0) {
+	    _gnutls_extv_check_saved(&session->internals.hello_ext, GNUTLS_EXTENSION_SUPPORTED_ECC) < 0) {
 		session->internals.cand_ec_group = _gnutls_id_to_group(DEFAULT_EC_GROUP);
 	}
 

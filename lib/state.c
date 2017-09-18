@@ -397,8 +397,6 @@ void gnutls_deinit(gnutls_session_t session)
 
 	_gnutls_free_datum(&session->internals.resumption_data);
 
-	gnutls_free(session->internals.rexts);
-
 	gnutls_free(session->internals.rsup);
 
 	gnutls_credentials_clear(session);

@@ -599,3 +599,23 @@ gnutls_ext_get_data(gnutls_session_t session,
 {
 	return _gnutls_ext_get_session_data(session, id, data);
 }
+
+/**
+ * gnutls_ext_get_current_msg:
+ * @session: a #gnutls_session_t opaque pointer
+ *
+ * This function allows an extension handler to obtain the message
+ * this extension is being called from. The returned value is a single
+ * entry of the %gnutls_ext_flags_t enumeration. That is, if an
+ * extension was registered with the %GNUTLS_EXT_FLAG_CT and
+ * %GNUTLS_EXT_FLAG_CR flags, the value when called during parsing of the
+ * certificate message will be %GNUTLS_EXT_FLAG_CT.
+ *
+ * If not called under an extension handler, its value is undefined.
+ *
+ * Since: 3.6.x
+ **/
+unsigned gnutls_ext_get_current_msg(gnutls_session_t session)
+{
+	return _gnutls_ext_get_msg(session);
+}

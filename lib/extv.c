@@ -201,6 +201,8 @@ _gnutls_extv_parse(gnutls_session_t session,
 		     session, gnutls_ext_get_name(id), id,
 		     size);
 
+		_gnutls_ext_set_msg(session, msg);
+
 		if ((ret = ext->recv_func(session, sdata, size)) < 0) {
 			gnutls_assert();
 			return ret;
@@ -256,6 +258,8 @@ int send_extension(gnutls_session_t session,
 	ret = _gnutls_buffer_append_prefix(extdata, 16, 0);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
+
+	_gnutls_ext_set_msg(session, msg);
 
 	size_prev = extdata->length;
 	ret = p->send_func(session, extdata);

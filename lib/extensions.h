@@ -47,6 +47,17 @@ int _gnutls_ext_get_resumed_session_data(gnutls_session_t session,
 					 uint16_t type,
 					 gnutls_ext_priv_data_t * data);
 
+/* obtain the message this extension was received at */
+inline static gnutls_ext_flags_t _gnutls_ext_get_msg(gnutls_session_t session)
+{
+	return session->internals.ext_msg;
+}
+
+inline static void _gnutls_ext_set_msg(gnutls_session_t session, gnutls_ext_flags_t msg)
+{
+	session->internals.ext_msg = msg;
+}
+
 /* for session packing */
 int _gnutls_ext_pack(gnutls_session_t session, gnutls_buffer_st * packed);
 int _gnutls_ext_unpack(gnutls_session_t session,

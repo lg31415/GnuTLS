@@ -241,17 +241,10 @@ int send_extension(gnutls_session_t session,
 		return 0;
 	}
 
-	/* ensure we don't send something twice (i.e, overriden extensions in
-	 * client), and ensure we are sending only what we received in server. */
-	ret = _gnutls_extv_check_saved(v, p->id);
-
+	/* ensure we are sending only what we received in server. */
 	if (extv_flags & EXTV_SEND_SAVED_ONLY) {
+		ret = _gnutls_extv_check_saved(v, p->id);
 		if (ret < 0) /* not advertized */
-			return 0;
-	}
-
-	if (session->security_parameters.entity == GNUTLS_CLIENT) {
-		if (ret == 0) /* already sent */
 			return 0;
 	}
 
@@ -308,6 +301,8 @@ _gnutls_extv_gen(gnutls_session_t session,
 	int size;
 	int pos, ret;
 	size_t i, init_size = extdata->length;
+	uint16_t send_ids[MAX_EXT_TYPES];
+	unsigned nsend_ids = 0, j;
 
 	pos = extdata->length;	/* we will store length later on */
 
@@ -319,11 +314,19 @@ _gnutls_extv_gen(gnutls_session_t session,
 		ret = send_extension(session, v, &v->rexts[i], extdata, msg, parse_type, extv_flags);
 		if (ret < 0)
 			return gnutls_assert_val(ret);
+
+		if (nsend_ids < MAX_EXT_TYPES)
+			send_ids[nsend_ids++] = v->rexts[i].id;
 	}
 
 	/* send_extension() ensures we don't send duplicates, in case
 	 * of overriden extensions */
 	for (i = 0; _gnutls_extfunc[i] != NULL; i++) {
+		for (j = 0; j < nsend_ids; j++) {
+			if (send_ids[j] == _gnutls_extfunc[i]->id)
+				continue;
+		}
+
 		ret = send_extension(session, v, _gnutls_extfunc[i], extdata, msg, parse_type, extv_flags);
 		if (ret < 0)
 			return gnutls_assert_val(ret);

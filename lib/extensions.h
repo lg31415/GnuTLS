@@ -79,7 +79,7 @@ inline static const char *ext_msg_validity_to_str(gnutls_ext_flags_t msg)
 	}
 }
 
-typedef struct extension_entry_st {
+typedef struct hello_ext_entry_st {
 	const char *name; /* const overriden when free_struct is set */
 	unsigned free_struct;
 
@@ -113,9 +113,9 @@ typedef struct extension_entry_st {
 	 * gnutls_init(), or modify the TLS protocol in a way that the application
 	 * cannot control. */
 	unsigned cannot_be_overriden;
-} extension_entry_st;
+} hello_ext_entry_st;
 
-int _gnutls_ext_register(extension_entry_st *);
+int _gnutls_ext_register(hello_ext_entry_st *);
 
 void _gnutls_extension_list_add_sr(gnutls_session_t session);
 
@@ -142,7 +142,7 @@ _gnutls_extension_list_check(gnutls_session_t session, extensions_t id)
  * Returns zero if failed, non-zero on success.
  */
 inline static
-unsigned _gnutls_extension_list_add(gnutls_session_t session, const struct extension_entry_st *e, unsigned check_dup)
+unsigned _gnutls_extension_list_add(gnutls_session_t session, const struct hello_ext_entry_st *e, unsigned check_dup)
 {
 	if (check_dup && _gnutls_extension_list_check(session, e->gid) == 0) {
 			return 0;

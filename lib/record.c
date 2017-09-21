@@ -379,6 +379,8 @@ copy_record_version(gnutls_session_t session,
 	return 0;
 }
 
+#define TMP_IS_TLS_1_3(session, type) (type == GNUTLS_APPLICATION_DATA)
+
 /* Increments the sequence value
  */
 inline static int
@@ -1131,6 +1133,28 @@ static int recv_headers(gnutls_session_t session,
 	return 0;
 }
 
+static int
+tls13_remove_arbitrary_padding(mbuffer_st *mb)
+{
+	int padding_removed_bytes = 0;
+	unsigned char *data = _mbuffer_get_udata_ptr(mb);
+	unsigned int size = _mbuffer_get_udata_size(mb);
+
+	while (size > 0 && data[size - 1] == 0) {
+		padding_removed_bytes++;
+		size--;
+	}
+
+	/* this should not happen */
+	if (!size)
+		return -1;
+
+	if (padding_removed_bytes > 0)
+		_mbuffer_set_udata_size(mb, size);
+
+	return padding_removed_bytes;
+}
+
 /* @ms: is the number of milliseconds to wait for data. Use zero for indefinite.
  *
  * This will receive record layer packets and add them to 
@@ -1294,6 +1318,38 @@ _gnutls_recv_in_buffers(gnutls_session_t session, content_type_t type,
 		     _gnutls_packet2str(record.type), record.type,
 		     (int) _mbuffer_get_udata_size(decrypted));
 
+	}
+
+	if (TMP_IS_TLS_1_3(session, type)) {
+		char *data;
+		size_t len;
+
+		ret = tls13_remove_arbitrary_padding(decrypted);
+
+		if (ret < 0) {
+			_gnutls_audit_log(session,
+					"Discarded message [%u] due to invalid padding\n",
+					(unsigned int) _gnutls_uint64touint32(packet_sequence));
+			ret = GNUTLS_E_UNEXPECTED_PACKET_LENGTH;
+			goto sanity_check_error;
+		}
+
+		_gnutls_record_log("REC[%p]: Removed %u bytes of padding\n",
+				session,
+				(unsigned int) ret);
+
+		data = _mbuffer_get_udata_ptr(decrypted);
+		len = _mbuffer_get_udata_size(decrypted);
+
+		if ((unsigned char) data[len - 1] != type) {
+			_gnutls_audit_log(session,
+				"Discarded message [%u] due to invalid content type (%d)\n",
+				(unsigned int) _gnutls_uint64touint32(packet_sequence), data[len - 1]);
+			ret = GNUTLS_E_TLS_PACKET_DECODING_ERROR;
+			goto sanity_check_error;
+		}
+
+		_mbuffer_set_udata_size(decrypted, len - 1);
 	}
 
 	/* Increase sequence number. We do both for TLS and DTLS, since in

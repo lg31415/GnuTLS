@@ -49,6 +49,35 @@ _gnutls_set_datum(gnutls_datum_t * dat, const void *data, size_t data_size)
 	return 0;
 }
 
+int
+_gnutls_zeroize_datum(gnutls_datum_t *dat, size_t ttl_size, const void *data, size_t data_size)
+{
+	int retval = 0;
+
+	if (ttl_size == 0) {
+		dat->data = NULL;
+		dat->size = 0;
+		goto end;
+	}
+
+	dat->data = gnutls_malloc(ttl_size);
+	if (dat->data == NULL)
+		return GNUTLS_E_MEMORY_ERROR;
+
+	dat->size = ttl_size;
+	memset(dat->data, 0, ttl_size);
+
+	if (data && (ttl_size >= data_size)) {
+		memcpy(dat->data, data, data_size);
+	} else if (data) {
+		gnutls_free(dat->data);
+		retval = GNUTLS_E_INTERNAL_ERROR;
+	}
+
+end:
+	return retval;
+}
+
 /* ensures that the data set are null-terminated
  * The function always returns an allocated string in @dat on success.
  */

@@ -30,6 +30,8 @@
  */
 int _gnutls_set_datum(gnutls_datum_t * dat, const void *data,
 		      size_t data_size);
+int _gnutls_zeroize_datum(gnutls_datum_t *dat, size_t ttl_size,
+		const void *data, size_t data_size);
 
 /* This will always return a non-NULL, and zero-terminated string in @dat.
  */

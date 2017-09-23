@@ -66,6 +66,12 @@ struct tls_record_st {
 	/* the data */
 };
 
+struct tls_inner_plaintext_st {
+	size_t data_size;
+	size_t padding_size;
+	size_t send_data_size;
+};
+
 /**
  * gnutls_record_disable_padding:  
  * @session: is a #gnutls_session_t type.
@@ -393,6 +399,98 @@ sequence_increment(gnutls_session_t session, gnutls_uint64 * value)
 	}
 }
 
+static size_t
+tls13_calc_padding_length(int length, int max_size, unsigned int align_pos, size_t min_pad)
+{
+	/*
+	 * This is the space we have for the padding.
+	 * We substract one extra byte for the content type.
+	 */
+	size_t remainder = max_size - length - 1,
+		ttl = length + min_pad,
+		aligned_pad = (align_pos - (ttl % align_pos)) + min_pad;
+
+	if (remainder >= aligned_pad)
+		return aligned_pad;
+	else
+		return remainder;
+}
+
+/*
+ * This function calculates the length of the TLSInnerPlaintext structure.
+ *
+ * If the length of the data to send is bigger than the maximum record length we can send,
+ * we hard cap to that value. In TLS 1.3 we substract one additional byte from the data to leave
+ * room for the content type.
+ *
+ * If the data is smaller than the maximum record length then we use the data's length. In TLS 1.3
+ * we take some more bytes for the padding and the content type.
+ */
+static int
+calc_inner_plaintext_length(gnutls_session_t session, content_type_t type,
+		record_parameters_st *record_params,
+		struct tls_inner_plaintext_st *ipt,
+		ssize_t cipher_size, size_t min_pad)
+{
+	size_t max_send_size = max_user_send_size(session, record_params);
+
+	ipt->padding_size = 0;
+
+	if (ipt->data_size >= max_send_size) {
+		if (IS_DTLS(session))
+			return gnutls_assert_val(GNUTLS_E_LARGE_PACKET);
+
+		ipt->data_size = max_send_size;
+		ipt->send_data_size = ipt->data_size;
+
+		/* TLS 1.3 - We need to leave one extra byte for the content type */
+		if (TMP_IS_TLS_1_3(session, type))
+			ipt->data_size--;
+	} else {
+		ipt->send_data_size = ipt->data_size;
+
+		if (TMP_IS_TLS_1_3(session, type)) {
+			/* TLS 1.3 - Leave one extra byte for the content type */
+			ipt->send_data_size++;
+
+			if (ipt->send_data_size < max_send_size && min_pad > 0) {
+				/* TLS 1.3 - Add some padding until the next 16-byte boundary */
+				ipt->padding_size = tls13_calc_padding_length(ipt->send_data_size, max_send_size,
+						16, min_pad);
+			}
+		}
+	}
+
+	ipt->send_data_size += ipt->padding_size;
+	return GNUTLS_E_SUCCESS;
+}
+
+/*
+ * This function generates the TLSInnerPlaintext structure
+ * for TLS 1.3. This is the data that will be AEAD-encrypted
+ * before sending.
+ *
+ * It includes:
+ *
+ *  - Data to send
+ *  - One byte for the content type
+ *  - Padding - A number of all zero bytes
+ */
+static int
+tls13_generate_inner_plaintext(gnutls_session_t session,
+		content_type_t type,
+		gnutls_datum_t *data,
+		const void *_data,
+		struct tls_inner_plaintext_st *ipt)
+{
+	if (_gnutls_zeroize_datum(data, ipt->send_data_size, _data, ipt->data_size))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	data->data[ipt->data_size] = type;
+
+	return GNUTLS_E_SUCCESS;
+}
+
 /* This function behaves exactly like write(). The only difference is
  * that it accepts, the gnutls_session_t and the content_type_t of data to
  * send (if called by the user the Content is specific)
@@ -425,13 +523,15 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 	mbuffer_st *bufel;
 	ssize_t cipher_size;
 	int retval, ret;
-	int send_data_size;
 	uint8_t *headers;
 	int header_size;
-	const uint8_t *data = _data;
+	gnutls_datum_t data;
 	record_parameters_st *record_params;
-	size_t max_send_size;
 	record_state_st *record_state;
+	struct tls_inner_plaintext_st tls_inner_plaintext = {
+			.data_size = data_size,
+			.send_data_size = data_size
+	};
 
 	ret = _gnutls_epoch_get(session, epoch_rel, &record_params);
 	if (ret < 0)
@@ -448,27 +548,18 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 	 * ok, and means to resume.
 	 */
 	if (session->internals.record_send_buffer.byte_length == 0 &&
-	    (data_size == 0 && _data == NULL)) {
+	    (tls_inner_plaintext.data_size == 0 && _data == NULL)) {
 		gnutls_assert();
 		return GNUTLS_E_INVALID_REQUEST;
 	}
 
-	if (type != GNUTLS_ALERT)	/* alert messages are sent anyway */
+	if (type != GNUTLS_ALERT) {	/* alert messages are sent anyway */
 		if (session_is_valid(session)
 		    || session->internals.may_not_write != 0) {
 			gnutls_assert();
 			return GNUTLS_E_INVALID_SESSION;
 		}
-
-	max_send_size = max_user_send_size(session, record_params);
-
-	if (data_size > max_send_size) {
-		if (IS_DTLS(session))
-			return gnutls_assert_val(GNUTLS_E_LARGE_PACKET);
-
-		send_data_size = max_send_size;
-	} else
-		send_data_size = data_size;
+	}
 
 	/* Only encrypt if we don't have data to send 
 	 * from the previous run. - probably interrupted.
@@ -483,15 +574,20 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 
 		retval = session->internals.record_send_buffer_user_size;
 	} else {
-		if (unlikely((send_data_size == 0 && min_pad == 0)))
+		cipher_size = MAX_RECORD_SEND_SIZE(session);
+		retval = calc_inner_plaintext_length(session, type, record_params,
+				&tls_inner_plaintext,
+				cipher_size, min_pad);
+		if (retval != GNUTLS_E_SUCCESS)
+			return retval;
+
+		if (unlikely((tls_inner_plaintext.data_size == 0 && min_pad == 0)))
 			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 		/* now proceed to packet encryption
 		 */
-		cipher_size = MAX_RECORD_SEND_SIZE(session);
-
-		bufel = _mbuffer_alloc_align16(cipher_size + CIPHER_SLACK_SIZE, 
-			get_total_headers2(session, record_params));
+		bufel = _mbuffer_alloc_align16(cipher_size + CIPHER_SLACK_SIZE,
+				get_total_headers2(session, record_params));
 		if (bufel == NULL)
 			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
 
@@ -509,19 +605,43 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 			memcpy(&headers[3],
 			       record_state->sequence_number.i, 8);
 
-		_gnutls_record_log
-		    ("REC[%p]: Preparing Packet %s(%d) with length: %d and min pad: %d\n",
-		     session, _gnutls_packet2str(type), type,
-		     (int) data_size, (int) min_pad);
+		if (TMP_IS_TLS_1_3(session, type)) {
+			_gnutls_record_log(
+					"REC[%p]: Preparing Packet %s(%d) with length: %d and padding: %d\n",
+					session, _gnutls_packet2str(type), type,
+					(int) tls_inner_plaintext.data_size,
+					(int) tls_inner_plaintext.padding_size);
+		} else {
+			_gnutls_record_log
+			    ("REC[%p]: Preparing Packet %s(%d) with length: %d and min pad: %d\n",
+			     session, _gnutls_packet2str(type), type,
+			     (int) tls_inner_plaintext.data_size, (int) min_pad);
+		}
 
 		header_size = RECORD_HEADER_SIZE(session);
 		_mbuffer_set_udata_size(bufel, cipher_size);
 		_mbuffer_set_uhead_size(bufel, header_size);
 
-		ret =
-		    _gnutls_encrypt(session,
-				    data, send_data_size, min_pad,
-				    bufel, type, record_params);
+		if (TMP_IS_TLS_1_3(session, type)) {
+			retval = tls13_generate_inner_plaintext(session, type,
+					&data, _data, &tls_inner_plaintext);
+			if (retval != GNUTLS_E_SUCCESS)
+				return retval;
+			ret =
+			    _gnutls_encrypt(session,
+					    data.data, data.size, min_pad,
+					    bufel, type, record_params);
+
+			retval = tls_inner_plaintext.data_size;
+			_gnutls_free_datum(&data);
+		} else {
+			ret =
+			    _gnutls_encrypt(session,
+					    _data, tls_inner_plaintext.send_data_size, min_pad,
+					    bufel, type, record_params);
+			retval = tls_inner_plaintext.send_data_size;
+		}
+
 		if (ret <= 0) {
 			gnutls_assert();
 			if (ret == 0)
@@ -531,9 +651,8 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 		}
 
 		cipher_size = _mbuffer_get_udata_size(bufel);
-		retval = send_data_size;
 		session->internals.record_send_buffer_user_size =
-		    send_data_size;
+		    tls_inner_plaintext.send_data_size;
 
 		/* increase sequence number
 		 */

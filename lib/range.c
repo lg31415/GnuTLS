@@ -26,6 +26,9 @@
 #include "constate.h"
 #include "record.h"
 
+/* TODO set this to the right value */
+#define TMP_IS_TLS_1_3(session) (1)
+
 static void
 _gnutls_set_range(gnutls_range_st * dst, const size_t low,
 		  const size_t high)
@@ -123,6 +126,8 @@ int gnutls_record_can_use_length_hiding(gnutls_session_t session)
 		return 1;
 	case CIPHER_STREAM:
 	case CIPHER_AEAD:
+		if (TMP_IS_TLS_1_3(session))
+			return 1;
 	default:
 		return 0;
 	}
@@ -303,4 +308,51 @@ gnutls_record_send_range(gnutls_session_t session, const void *data,
 	}
 
 	return sent;
+}
+
+ssize_t
+gnutls_tls13_record_send_padding(gnutls_session_t session, size_t min_pad)
+{
+	int ret;
+	size_t pad;
+	ssize_t max_frag;
+	record_parameters_st *record_params;
+
+	ret = _gnutls_epoch_get(session, EPOCH_WRITE_CURRENT,
+			&record_params);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+
+	max_frag = max_user_send_size(session, record_params);
+	ret = _gnutls_range_max_lh_pad(session, min_pad, max_frag);
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+	pad = MIN(ret, min_pad);
+
+	_gnutls_record_log(
+			"RANGE (TLS 1.3): Sending empty message with %u bytes of padding\n",
+			(unsigned int) pad);
+
+	ret = _gnutls_send_tlen_int(session, GNUTLS_APPLICATION_DATA,
+			-1, EPOCH_WRITE_CURRENT,
+			NULL, 0,
+			pad,
+			MBUFFER_FLUSH);
+	while (ret == GNUTLS_E_AGAIN || ret == GNUTLS_E_INTERRUPTED) {
+		ret = _gnutls_send_tlen_int(session, GNUTLS_APPLICATION_DATA,
+				-1, EPOCH_WRITE_CURRENT,
+				NULL, 0, 0,
+				MBUFFER_FLUSH);
+	}
+
+	if (ret < 0)
+		return gnutls_assert_val(ret);
+	if (ret > 0) {
+		_gnutls_record_log(
+				"RANGE (TLS 1.3): ERROR: ret = %u, but should be zero\n",
+				ret);
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+	}
+
+	return pad;
 }

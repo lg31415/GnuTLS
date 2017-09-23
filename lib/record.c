@@ -548,7 +548,8 @@ _gnutls_send_tlen_int(gnutls_session_t session, content_type_t type,
 	 * ok, and means to resume.
 	 */
 	if (session->internals.record_send_buffer.byte_length == 0 &&
-	    (tls_inner_plaintext.data_size == 0 && _data == NULL)) {
+	    (tls_inner_plaintext.data_size == 0 && _data == NULL) &&
+	    !TMP_IS_TLS_1_3(session, type)) {
 		gnutls_assert();
 		return GNUTLS_E_INVALID_REQUEST;
 	}
@@ -1459,6 +1460,10 @@ _gnutls_recv_in_buffers(gnutls_session_t session, content_type_t type,
 
 		data = _mbuffer_get_udata_ptr(decrypted);
 		len = _mbuffer_get_udata_size(decrypted);
+		if (len == 0)  {
+			ret = GNUTLS_E_UNEXPECTED_PACKET_LENGTH;
+			goto sanity_check_error;
+		}
 
 		if ((unsigned char) data[len - 1] != type) {
 			_gnutls_audit_log(session,
@@ -1469,6 +1474,11 @@ _gnutls_recv_in_buffers(gnutls_session_t session, content_type_t type,
 		}
 
 		_mbuffer_set_udata_size(decrypted, len - 1);
+		if ((len - 1) == 0) {
+			_gnutls_record_log(
+					"REC[%d]: TLS 1.3 - Got an empty message with padding only\n",
+					session);
+		}
 	}
 
 	/* Increase sequence number. We do both for TLS and DTLS, since in
@@ -1482,13 +1492,13 @@ _gnutls_recv_in_buffers(gnutls_session_t session, content_type_t type,
 		goto sanity_check_error;
 	}
 
-/* (originally for) TLS 1.0 CBC protection. 
- * Actually this code is called if we just received
- * an empty packet. An empty TLS packet is usually
- * sent to protect some vulnerabilities in the CBC mode.
- * In that case we go to the beginning and start reading
- * the next packet.
- */
+	/* (originally for) TLS 1.0 CBC protection.
+	 * Actually this code is called if we just received
+	 * an empty packet. An empty TLS packet is usually
+	 * sent to protect some vulnerabilities in the CBC mode.
+	 * In that case we go to the beginning and start reading
+	 * the next packet.
+	 */
 	if (_mbuffer_get_udata_size(decrypted) == 0) {
 		_mbuffer_xfree(&decrypted);
 		empty_fragments++;

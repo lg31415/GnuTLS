@@ -30,6 +30,7 @@
 #include <random.h>
 #include <crypto.h>
 #include <fips.h>
+#include "crypto-api.h"
 
 typedef struct api_cipher_hd_st {
 	cipher_hd_st ctx_enc;
@@ -622,9 +623,6 @@ int gnutls_key_generate(gnutls_datum_t * key, unsigned int key_size)
 }
 
 /* AEAD API */
-typedef struct api_aead_cipher_hd_st {
-	cipher_hd_st ctx_enc;
-} api_aead_cipher_hd_st;
 
 /**
  * gnutls_aead_cipher_init:
@@ -646,11 +644,6 @@ int gnutls_aead_cipher_init(gnutls_aead_cipher_hd_t * handle,
 			    const gnutls_datum_t * key)
 {
 	api_aead_cipher_hd_st *h;
-	const cipher_entry_st* e;
-
-	e = cipher_to_entry(cipher);
-	if (e == NULL || e->type != CIPHER_AEAD)
-		return gnutls_assert_val(GNUTLS_E_INVALID_REQUEST);
 
 	*handle = gnutls_calloc(1, sizeof(api_aead_cipher_hd_st));
 	if (*handle == NULL) {
@@ -659,10 +652,7 @@ int gnutls_aead_cipher_init(gnutls_aead_cipher_hd_t * handle,
 	}
 
 	h = *handle;
-
-	return
-	    _gnutls_cipher_init(&h->ctx_enc, e, key,
-				NULL, 1);
+	return _gnutls_aead_cipher_init(h, cipher, key);
 }
 
 /**
@@ -788,8 +778,6 @@ gnutls_aead_cipher_encrypt(gnutls_aead_cipher_hd_t handle,
  **/
 void gnutls_aead_cipher_deinit(gnutls_aead_cipher_hd_t handle)
 {
-	api_aead_cipher_hd_st *h = handle;
-
-	_gnutls_cipher_deinit(&h->ctx_enc);
+	_gnutls_aead_cipher_deinit(handle);
 	gnutls_free(handle);
 }

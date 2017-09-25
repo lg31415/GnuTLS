@@ -493,10 +493,11 @@ void gnutls_dtls_set_mtu(gnutls_session_t session, unsigned int mtu)
 	session->internals.dtls.mtu = MIN(mtu, DEFAULT_MAX_RECORD_SIZE);
 }
 
-int _gnutls_record_overhead(const cipher_entry_st * cipher,
-			   const mac_entry_st * mac,
-			   unsigned etm,
-			   unsigned est_data)
+int _gnutls_record_overhead(const version_entry_st *ver,
+			    const cipher_entry_st * cipher,
+			    const mac_entry_st * mac,
+			    unsigned etm,
+			    unsigned est_data)
 {
 	int total = 0;
 	int ret, blocksize;
@@ -506,7 +507,8 @@ int _gnutls_record_overhead(const cipher_entry_st * cipher,
 		return 0;
 
 	if (mac->id == GNUTLS_MAC_AEAD) {
-		total += cipher->explicit_iv;
+		if (!ver->tls13_sem)
+			total += cipher->explicit_iv;
 		total += _gnutls_cipher_get_tag_size(cipher);
 	} else {
 		ret = _gnutls_mac_get_algo_len(mac);
@@ -591,7 +593,7 @@ size_t gnutls_est_record_overhead_size(gnutls_protocol_t version,
 	else
 		total = DTLS_RECORD_HEADER_SIZE;
 
-	total += _gnutls_record_overhead(c, m, 0, 0);
+	total += _gnutls_record_overhead(v, c, m, 0, 0);
 
 	return total;
 }
@@ -612,13 +614,14 @@ static int record_overhead_rt(gnutls_session_t session, unsigned est_data)
 
 	if (session->internals.initial_negotiation_completed == 0)
 		return GNUTLS_E_INVALID_REQUEST;
-
 	ret = _gnutls_epoch_get(session, EPOCH_WRITE_CURRENT, &params);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
-	return _gnutls_record_overhead(params->cipher, params->mac,
-			       params->etm, est_data);
+	ret = _gnutls_record_overhead(get_version(session), params->cipher,
+				       params->mac,
+				       params->etm, est_data);
+	return ret;
 }
 
 /**
@@ -635,6 +638,7 @@ static int record_overhead_rt(gnutls_session_t session, unsigned est_data)
 size_t gnutls_record_overhead_size(gnutls_session_t session)
 {
 	const version_entry_st *v = get_version(session);
+	int ret;
 	size_t total;
 
 	if (v->transport == GNUTLS_STREAM)
@@ -642,7 +646,9 @@ size_t gnutls_record_overhead_size(gnutls_session_t session)
 	else
 		total = DTLS_RECORD_HEADER_SIZE;
 
-	total += record_overhead_rt(session, 0);
+	ret = record_overhead_rt(session, 0);
+	if (ret >= 0)
+		total += ret;
 
 	return total;
 }

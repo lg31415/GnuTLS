@@ -1,5 +1,6 @@
 GNUTLS_3_4@GNUTLS_3_4
 GNUTLS_3_6_0@GNUTLS_3_6_0
+GNUTLS_3_6_xx@GNUTLS_3_6_xx
 _gnutls_global_init_skip@GNUTLS_3_4
 gnutls_aead_cipher_decrypt@GNUTLS_3_4
 gnutls_aead_cipher_deinit@GNUTLS_3_4
@@ -181,6 +182,7 @@ gnutls_encode_rs_value@GNUTLS_3_6_0
 gnutls_error_is_fatal@GNUTLS_3_4
 gnutls_error_to_alert@GNUTLS_3_4
 gnutls_est_record_overhead_size@GNUTLS_3_4
+gnutls_ext_get_current_msg@GNUTLS_3_6_xx
 gnutls_ext_get_data@GNUTLS_3_4
 gnutls_ext_get_name@GNUTLS_3_4
 gnutls_ext_register@GNUTLS_3_4

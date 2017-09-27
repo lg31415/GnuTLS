@@ -281,6 +281,7 @@ APIMANS += gnutls_encode_rs_value.3
 APIMANS += gnutls_error_is_fatal.3
 APIMANS += gnutls_error_to_alert.3
 APIMANS += gnutls_est_record_overhead_size.3
+APIMANS += gnutls_ext_get_current_msg.3
 APIMANS += gnutls_ext_get_data.3
 APIMANS += gnutls_ext_get_name.3
 APIMANS += gnutls_ext_register.3

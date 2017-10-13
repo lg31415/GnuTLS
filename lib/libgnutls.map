@@ -1196,6 +1196,7 @@ GNUTLS_3_6_xx
 {
  global:
 	gnutls_ext_get_current_msg;
+	gnutls_ocsp_status_request_get2;
 } GNUTLS_3_6_0;
 
 GNUTLS_FIPS140_3_4 {

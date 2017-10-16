@@ -164,28 +164,30 @@ server_send(gnutls_session_t session,
 {
 	int ret;
 	gnutls_certificate_credentials_t cred;
-	gnutls_status_request_ocsp_func func;
-	void *func_ptr;
+	gnutls_cert_info_st cinfo;
 
 	cred = (gnutls_certificate_credentials_t)
 	    _gnutls_get_cred(session, GNUTLS_CRD_CERTIFICATE);
 	if (cred == NULL)	/* no certificate authentication */
 		return gnutls_assert_val(0);
 
+	memset(&cinfo, 0, sizeof(cinfo));
+	cinfo.pcert = session->internals.selected_cert_list;
+
 	if (session->internals.selected_ocsp_func) {
-		func = session->internals.selected_ocsp_func;
-		func_ptr = session->internals.selected_ocsp_func_ptr;
+		ret = session->internals.selected_ocsp_func(session,
+							    &cinfo,
+							    session->internals.selected_ocsp_func_ptr,
+							    &priv->sresp);
 	} else if (cred->glob_ocsp_func) {
-		func = cred->glob_ocsp_func;
-		func_ptr = cred->glob_ocsp_func_ptr;
+		ret = cred->glob_ocsp_func(session,
+					   &cinfo,
+					   cred->glob_ocsp_func_ptr,
+					   &priv->sresp);
 	} else {
 		return 0;
 	}
 
-	if (func == NULL)
-		return 0;
-
-	ret = func(session, func_ptr, &priv->sresp);
 	if (ret == GNUTLS_E_NO_CERTIFICATE_STATUS)
 		return 0;
 	else if (ret < 0)
@@ -362,6 +364,18 @@ gnutls_ocsp_status_request_get2(gnutls_session_t session,
 	return 0;
 }
 
+static int
+legacy_ocsp_func_emu(gnutls_session_t session, const gnutls_cert_info_st *cinfo,
+		     void *ptr, gnutls_datum_t * ocsp_response)
+{
+	legacy_ocsp_func_st *s = ptr;
+
+	if (cinfo->cert_index == 0)
+		return s->func(session, s->ptr, ocsp_response);
+
+	return GNUTLS_E_NO_CERTIFICATE_STATUS;
+}
+
 /**
  * gnutls_certificate_set_ocsp_status_request_function:
  * @sc: is a #gnutls_certificate_credentials_t type.
@@ -389,13 +403,15 @@ gnutls_ocsp_status_request_get2(gnutls_session_t session,
  * Since: 3.1.3
  **/
 void
-gnutls_certificate_set_ocsp_status_request_function
-(gnutls_certificate_credentials_t sc,
-gnutls_status_request_ocsp_func ocsp_func, void *ptr)
+gnutls_certificate_set_ocsp_status_request_function(gnutls_certificate_credentials_t sc,
+						    gnutls_status_request_ocsp_func ocsp_func,
+						    void *ptr)
 {
+	sc->glob_ocsp_func = legacy_ocsp_func_emu;
+	sc->glob_ocsp_func_ptr = &sc->glob_legacy_ocsp;
 
-	sc->glob_ocsp_func = ocsp_func;
-	sc->glob_ocsp_func_ptr = ptr;
+	sc->glob_legacy_ocsp.func = ocsp_func;
+	sc->glob_legacy_ocsp.ptr = ptr;
 }
 
 /**
@@ -428,15 +444,94 @@ gnutls_status_request_ocsp_func ocsp_func, void *ptr)
  * with the %GNUTLS_CERTIFICATE_API_V2 flag to make the set certificate
  * functions return an index usable by this function.
  *
+ * This function works with the pre-loaded certificate chains, and
+ * must be called after they are set. When the certificate chains are
+ * obtained via a callback, i.e., when gnutls_certificate_set_retrieve_function()
+ * and friends are used, use gnutls_certificate_set_ocsp_status_request_function3()
+ * with %GNUTLS_OCSP_CB_GLOBAL_SET flag instead.
+ *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
  *
  * Since: 3.5.5
  **/
 int
-gnutls_certificate_set_ocsp_status_request_function2
-(gnutls_certificate_credentials_t sc, unsigned idx, gnutls_status_request_ocsp_func ocsp_func, void *ptr)
+gnutls_certificate_set_ocsp_status_request_function2(gnutls_certificate_credentials_t sc,
+						     unsigned idx,
+						     gnutls_status_request_ocsp_func ocsp_func,
+						     void *ptr)
 {
+	if (idx >= sc->ncerts)
+		return gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
+
+	sc->certs[idx].legacy_ocsp.func = ocsp_func;
+	sc->certs[idx].legacy_ocsp.ptr = ptr;
+
+	return gnutls_certificate_set_ocsp_status_request_function3(sc, idx,
+								    legacy_ocsp_func_emu,
+								    &sc->certs[idx].legacy_ocsp,
+								    0);
+}
+
+/**
+ * gnutls_certificate_set_ocsp_status_request_function3:
+ * @sc: is a #gnutls_certificate_credentials_t type.
+ * @idx: is a certificate index as returned by gnutls_certificate_set_key() and friends
+ * @ocsp_func: function pointer to OCSP status request callback.
+ * @ptr: opaque pointer passed to callback function
+ * @flags: must be zero
+ *
+ * This function is to be used by server to register a callback to
+ * provide OCSP status requests that correspond to the indexed certificate chain
+ * from the client.  The callback will be invoked if the client supplied a 
+ * status-request OCSP extension.
+ *
+ * The callback function prototype is:
+ *
+ * typedef int (*gnutls_status_request_ocsp_func2)
+ *    (gnutls_session_t session, const gnutls_cert_info_st *cinfo, void *ptr, gnutls_datum_t *ocsp_resp);
+ *
+ * The callback will be invoked if the client requests an OCSP certificate
+ * status.  The callback may return %GNUTLS_E_NO_CERTIFICATE_STATUS, if
+ * there is no recent OCSP response. If the callback returns %GNUTLS_E_SUCCESS,
+ * it is expected to have the @ocsp_response field set with a valid (DER-encoded)
+ * OCSP response. The response must be a value allocated using gnutls_malloc(),
+ * and will be deinitialized by the caller.
+ *
+ * This function allows a server to provide more than a single OCSP responses
+ * corresponding to each certificate in the certificate chain.
+ *
+ * When the flag %GNUTLS_OCSP_CB_GLOBAL_SET is specified in @flags, this
+ * function can be used to set a callback that is used even when the
+ * certificates are provided by the application via a callback. That is,
+ * when gnutls_certificate_set_retrieve_function() and friends are used.
+ * In that case the callback will be called with the selected certificate.
+ *
+ * Note: the ability to set multiple OCSP responses per credential
+ * structure via the index @idx was added in version 3.5.6. To keep
+ * backwards compatibility, it requires using gnutls_certificate_set_flags()
+ * with the %GNUTLS_CERTIFICATE_API_V2 flag to make the set certificate
+ * functions return an index usable by this function.
+ *
+ * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
+ *   otherwise a negative error code is returned.
+ *
+ * Since: 3.6.xx
+ **/
+int
+gnutls_certificate_set_ocsp_status_request_function3(gnutls_certificate_credentials_t sc,
+						     unsigned idx,
+						     gnutls_status_request_ocsp_func2 ocsp_func,
+						     void *ptr,
+						     unsigned flags)
+{
+	if (flags & GNUTLS_OCSP_CB_GLOBAL_SET) {
+		sc->glob_ocsp_func = ocsp_func;
+		sc->glob_ocsp_func_ptr = ptr;
+
+		return 0;
+	}
+
 	if (idx >= sc->ncerts)
 		return gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
 
@@ -446,11 +541,16 @@ gnutls_certificate_set_ocsp_status_request_function2
 	return 0;
 }
 
-static int file_ocsp_func(gnutls_session_t session, void *ptr,
+static int file_ocsp_func(gnutls_session_t session,
+			  const gnutls_cert_info_st *cinfo,
+			  void *ptr,
 			  gnutls_datum_t * ocsp_response)
 {
 	int ret;
 	const char *file = ptr;
+
+	if (cinfo->cert_index > 0)
+		return GNUTLS_E_NO_CERTIFICATE_STATUS;
 
 	ret = gnutls_load_file(file, ocsp_response);
 	if (ret < 0)
@@ -498,9 +598,7 @@ gnutls_certificate_set_ocsp_status_request_file(gnutls_certificate_credentials_t
 	if (sc->certs[idx].ocsp_response_file == NULL)
 		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
 
-	gnutls_certificate_set_ocsp_status_request_function2(sc, idx, file_ocsp_func, sc->certs[idx].ocsp_response_file);
-
-	return 0;
+	return gnutls_certificate_set_ocsp_status_request_function3(sc, idx, file_ocsp_func, sc->certs[idx].ocsp_response_file, 0);
 }
 
 static void _gnutls_status_request_deinit_data(gnutls_ext_priv_data_t epriv)

@@ -1043,7 +1043,7 @@ typedef struct {
 	int16_t selected_cert_list_length;
 	struct gnutls_privkey_st *selected_key;
 	bool selected_need_free;
-	gnutls_status_request_ocsp_func selected_ocsp_func;
+	gnutls_status_request_ocsp_func2 selected_ocsp_func;
 	void *selected_ocsp_func_ptr;
 
 

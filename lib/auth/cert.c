@@ -61,7 +61,7 @@ static void
 _gnutls_selected_certs_set(gnutls_session_t session,
 			   gnutls_pcert_st * certs, int ncerts,
 			   gnutls_privkey_t key, int need_free,
-			   gnutls_status_request_ocsp_func ocsp_func,
+			   gnutls_status_request_ocsp_func2 ocsp_func,
 			   void *ocsp_func_ptr);
 
 #define MAX_CLIENT_SIGN_ALGOS 3
@@ -1357,7 +1357,7 @@ static void
 _gnutls_selected_certs_set(gnutls_session_t session,
 			   gnutls_pcert_st * certs, int ncerts,
 			   gnutls_privkey_t key, int need_free,
-			   gnutls_status_request_ocsp_func ocsp_func,
+			   gnutls_status_request_ocsp_func2 ocsp_func,
 			   void *ocsp_func_ptr)
 {
 	_gnutls_selected_certs_deinit(session);

@@ -87,6 +87,61 @@ cleanup:
 	return ret;
 }
 
+struct ocsp_req_ctx_st {
+	gnutls_pcert_st *pcert;
+	unsigned cert_index;
+	gnutls_session_t session;
+	gnutls_certificate_credentials_t cred;
+};
+
+static
+int append_status_request(void *_ctx, gnutls_buffer_st *buf)
+{
+	struct ocsp_req_ctx_st *ctx = _ctx;
+	gnutls_session_t session = ctx->session;
+	int ret;
+	gnutls_cert_info_st cinfo;
+	gnutls_datum_t resp;
+
+	assert(session->internals.selected_ocsp_func != NULL || ctx->cred->glob_ocsp_func != NULL);
+
+	/* The global ocsp callback function can only be used to return
+	 * a single certificate request */
+	if (!session->internals.selected_ocsp_func && ctx->cert_index != 0)
+		return 0;
+
+	memset(&cinfo, 0, sizeof(cinfo));
+	cinfo.pcert = ctx->pcert;
+	cinfo.cert_index = ctx->cert_index;
+
+	if (session->internals.selected_ocsp_func)
+		ret = session->internals.selected_ocsp_func(session, &cinfo, session->internals.selected_ocsp_func_ptr, &resp);
+	else
+		ret = ctx->cred->glob_ocsp_func(session, &cinfo, ctx->cred->glob_ocsp_func_ptr, &resp);
+	if (ret == GNUTLS_E_NO_CERTIFICATE_STATUS || resp.data == 0) {
+		return 0;
+	} else if (ret < 0) {
+		return gnutls_assert_val(ret);
+	}
+
+	ret = _gnutls_buffer_append_data(buf, "\x01", 1);
+	if (ret < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	ret = _gnutls_buffer_append_data_prefix(buf, 24, resp.data, resp.size);
+	if (ret < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	ret = 0;
+ cleanup:
+	gnutls_free(resp.data);
+	return ret;
+}
+
 int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 {
 	int ret;
@@ -95,9 +150,19 @@ int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 	int apr_cert_list_length;
 	mbuffer_st *bufel = NULL;
 	gnutls_buffer_st buf;
-	unsigned pos_mark;
+	unsigned pos_mark, ext_pos_mark;
 	unsigned i;
+	struct ocsp_req_ctx_st ctx;
+	gnutls_certificate_credentials_t cred;
+
 	if (again == 0) {
+		cred = (gnutls_certificate_credentials_t)
+		    _gnutls_get_cred(session, GNUTLS_CRD_CERTIFICATE);
+		if (cred == NULL) {
+			gnutls_assert();
+			return GNUTLS_E_INSUFFICIENT_CREDENTIALS;
+		}
+
 		ret = _gnutls_get_selected_cert(session, &apr_cert_list,
 						&apr_cert_list_length, &apr_pkey);
 		if (ret < 0)
@@ -138,11 +203,42 @@ int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 				goto cleanup;
 			}
 
-			/* no extensions for now */
-			ret = _gnutls_buffer_append_prefix(&buf, 16, 0);
-			if (ret < 0) {
-				gnutls_assert();
-				goto cleanup;
+#ifdef ENABLE_OCSP
+			if ((session->internals.selected_ocsp_func != NULL ||
+			    cred->glob_ocsp_func != NULL) &&
+			    _gnutls_hello_ext_is_present(session, GNUTLS_EXTENSION_STATUS_REQUEST)) {
+				/* append status response if available */
+				ret = _gnutls_extv_append_init(&buf);
+				if (ret < 0) {
+					gnutls_assert();
+					goto cleanup;
+				}
+				ext_pos_mark = ret;
+
+				ctx.pcert = &apr_cert_list[i];
+				ctx.cert_index = i;
+				ctx.session = session;
+				ctx.cred = cred;
+				ret = _gnutls_extv_append(&buf, STATUS_REQUEST_TLS_ID,
+							  &ctx, append_status_request);
+				if (ret < 0) {
+					gnutls_assert();
+					goto cleanup;
+				}
+
+				ret = _gnutls_extv_append_final(&buf, ext_pos_mark);
+				if (ret < 0) {
+					gnutls_assert();
+					goto cleanup;
+				}
+			} else
+#endif
+			{
+				ret = _gnutls_buffer_append_prefix(&buf, 16, 0);
+				if (ret < 0) {
+					gnutls_assert();
+					goto cleanup;
+				}
 			}
 		}
 
@@ -161,6 +257,7 @@ int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 typedef struct crt_cert_ctx_st {
 	gnutls_session_t session;
 	gnutls_datum_t *ocsp;
+	unsigned idx;
 } crt_cert_ctx_st;
 
 static int parse_cert_extension(void *_ctx, uint16_t tls_id, const uint8_t *data, int data_size)
@@ -175,6 +272,8 @@ static int parse_cert_extension(void *_ctx, uint16_t tls_id, const uint8_t *data
 			gnutls_assert();
 			goto unexpected;
 		}
+
+		_gnutls_handshake_log("Found OCSP response on cert %d\n", ctx->idx);
 
 		ret = _gnutls_parse_ocsp_response(session, data, data_size, ctx->ocsp);
 		if (ret < 0)
@@ -244,12 +343,13 @@ parse_cert_list(gnutls_session_t session, uint8_t * data, size_t data_size)
 	}
 
 	i = dsize;
+
 	while (i > 0) {
 		DECR_LEN(dsize, 3);
 		len = _gnutls_read_uint24(p);
-		p += 3;
+
 		DECR_LEN(dsize, len);
-		p += len;
+		p += len + 3;
 		i -= len + 3;
 
 		DECR_LEN(dsize, 2);
@@ -257,6 +357,7 @@ parse_cert_list(gnutls_session_t session, uint8_t * data, size_t data_size)
 		DECR_LEN(dsize, len);
 
 		i -= len + 2;
+		p += len + 2;
 
 		nentries++;
 	}
@@ -309,16 +410,17 @@ parse_cert_list(gnutls_session_t session, uint8_t * data, size_t data_size)
 		p += len;
 
 		len = _gnutls_read_uint16(p);
-		p += 2;
 
 		ctx.ocsp = &peer_ocsp[j];
+		ctx.idx = j;
 
-		ret = _gnutls_extv_parse(&ctx, parse_cert_extension, p, len);
+		ret = _gnutls_extv_parse(&ctx, parse_cert_extension, p, len+2);
 		if (ret < 0) {
 			gnutls_assert();
 			goto cleanup;
 		}
 
+		p += len+2;
 		npeer_ocsp++;
 	}
 

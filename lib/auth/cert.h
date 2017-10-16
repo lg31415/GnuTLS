@@ -30,13 +30,21 @@
 #include <gnutls/compat.h>
 #include <str_array.h>
 
+typedef struct legacy_ocsp_func_st {
+	gnutls_status_request_ocsp_func func;
+	void *ptr; /* private data of legacy_ocsp_func */
+} legacy_ocsp_func_st;
+
 typedef struct {
 	gnutls_pcert_st *cert_list;	/* a certificate chain */
 	unsigned int cert_list_length;	/* its length */
 	gnutls_str_array_t names;	/* the names in the first certificate */
 
-	gnutls_status_request_ocsp_func ocsp_func;
-	void *ocsp_func_ptr; /* corresponding OCSP response function + ptr */
+	legacy_ocsp_func_st legacy_ocsp;
+
+	gnutls_status_request_ocsp_func2 ocsp_func;
+	void *ocsp_func_ptr; /* private data of ocsp_func */
+
 	char *ocsp_response_file; /* corresponding OCSP response file */
 
 	/* the private key corresponding to certificate */
@@ -86,8 +94,10 @@ typedef struct gnutls_certificate_credentials_st {
 	/* temporarily hold the PIN if set_key_file2() is used with a PIN */
 	char pin_tmp[GNUTLS_PKCS11_MAX_PIN_LEN];
 
+	legacy_ocsp_func_st glob_legacy_ocsp;
+
 	/* OCSP */
-	gnutls_status_request_ocsp_func glob_ocsp_func;
+	gnutls_status_request_ocsp_func2 glob_ocsp_func;
 	void *glob_ocsp_func_ptr; /* corresponding OCSP response function */
 } certificate_credentials_st;
 

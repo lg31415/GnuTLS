@@ -219,9 +219,13 @@ void doit(void)
 		fail("error in setting trust cert: %s\n", gnutls_strerror(ret));
 	}
 
-	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA", "localhost", &ocsp_resp1, check_response, NULL);
-	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA", "localhost6", &ocsp_resp2, check_response, NULL);
-	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-RSA:-RSA:-DHE-RSA", NULL, &ocsp_resp3, check_response, NULL);
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.2", "localhost", &ocsp_resp1, check_response, NULL);
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.2", "localhost6", &ocsp_resp2, check_response, NULL);
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-RSA:-RSA:-DHE-RSA:-VERS-TLS-ALL:+VERS-TLS1.2", NULL, &ocsp_resp3, check_response, NULL);
+
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.3", "localhost", &ocsp_resp1, check_response, NULL);
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.3", "localhost6", &ocsp_resp2, check_response, NULL);
+	test_cli_serv(xcred, clicred, "NORMAL:-SIGN-ALL:+SIGN-ECDSA-SECP256R1-SHA256:-ECDHE-RSA:-RSA:-DHE-RSA:-VERS-TLS-ALL:+VERS-TLS1.3", NULL, &ocsp_resp3, check_response, NULL);
 
 	gnutls_certificate_free_credentials(xcred);
 	gnutls_certificate_free_credentials(clicred);

@@ -174,19 +174,13 @@ server_send(gnutls_session_t session,
 	memset(&cinfo, 0, sizeof(cinfo));
 	cinfo.pcert = session->internals.selected_cert_list;
 
-	if (session->internals.selected_ocsp_func) {
-		ret = session->internals.selected_ocsp_func(session,
-							    &cinfo,
-							    session->internals.selected_ocsp_func_ptr,
-							    &priv->sresp);
-	} else if (cred->glob_ocsp_func) {
-		ret = cred->glob_ocsp_func(session,
-					   &cinfo,
-					   cred->glob_ocsp_func_ptr,
-					   &priv->sresp);
-	} else {
+	if (session->internals.selected_ocsp_func == NULL)
 		return 0;
-	}
+
+	ret = session->internals.selected_ocsp_func(session,
+						    &cinfo,
+						    session->internals.selected_ocsp_func_ptr,
+						    &priv->sresp);
 
 	if (ret == GNUTLS_E_NO_CERTIFICATE_STATUS)
 		return 0;

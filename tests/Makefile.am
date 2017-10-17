@@ -103,6 +103,8 @@ ctests += tls13/key_limits
 
 ctests += tls13/multi-ocsp
 
+ctests += tls13/ocsp-client
+
 ctests += mini-record-2 simple gc set_pkcs12_cred cert certuniqueid tls-neg-ext-key \
 	 mpi certificate_set_x509_crl dn parse_ca x509-dn x509-dn-decode record-sizes \
 	 hostname-check cve-2008-4989 pkcs12_s2k chainverify record-sizes-range \

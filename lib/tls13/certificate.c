@@ -103,7 +103,7 @@ int append_status_request(void *_ctx, gnutls_buffer_st *buf)
 	gnutls_cert_info_st cinfo;
 	gnutls_datum_t resp;
 
-	assert(session->internals.selected_ocsp_func != NULL || ctx->cred->glob_ocsp_func != NULL);
+	assert(session->internals.selected_ocsp_func != NULL);
 
 	/* The global ocsp callback function can only be used to return
 	 * a single certificate request */
@@ -114,10 +114,7 @@ int append_status_request(void *_ctx, gnutls_buffer_st *buf)
 	cinfo.pcert = ctx->pcert;
 	cinfo.cert_index = ctx->cert_index;
 
-	if (session->internals.selected_ocsp_func)
-		ret = session->internals.selected_ocsp_func(session, &cinfo, session->internals.selected_ocsp_func_ptr, &resp);
-	else
-		ret = ctx->cred->glob_ocsp_func(session, &cinfo, ctx->cred->glob_ocsp_func_ptr, &resp);
+	ret = session->internals.selected_ocsp_func(session, &cinfo, session->internals.selected_ocsp_func_ptr, &resp);
 	if (ret == GNUTLS_E_NO_CERTIFICATE_STATUS || resp.data == 0) {
 		return 0;
 	} else if (ret < 0) {
@@ -204,8 +201,7 @@ int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 			}
 
 #ifdef ENABLE_OCSP
-			if ((session->internals.selected_ocsp_func != NULL ||
-			    cred->glob_ocsp_func != NULL) &&
+			if (session->internals.selected_ocsp_func != NULL &&
 			    _gnutls_hello_ext_is_present(session, GNUTLS_EXTENSION_STATUS_REQUEST)) {
 				/* append status response if available */
 				ret = _gnutls_extv_append_init(&buf);

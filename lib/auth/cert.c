@@ -394,7 +394,8 @@ call_get_cert_callback(gnutls_session_t session,
 		}
 
 		selected_certs_set(session, pcert, pcert_length,
-				   local_key, 0, NULL, NULL);
+				   local_key, 0,
+				   cred->glob_ocsp_func, cred->glob_ocsp_func_ptr);
 
 		return 0;
 
@@ -472,7 +473,7 @@ call_get_cert_callback(gnutls_session_t session,
 
 	selected_certs_set(session, local_certs,
 			   st2.ncerts, local_key, 1,
-			   NULL, NULL);
+			   cred->glob_ocsp_func, cred->glob_ocsp_func_ptr);
 
 	ret = 0;
 
@@ -574,17 +575,27 @@ _gnutls_select_client_cert(gnutls_session_t session,
 		}
 
 		if (indx >= 0) {
+			gnutls_status_request_ocsp_func2 ocsp_func;
+			void *ocsp_ptr;
+
+			if (cred->certs[indx].ocsp_func == NULL) {
+				ocsp_func = cred->glob_ocsp_func;
+				ocsp_ptr = cred->glob_ocsp_func_ptr;
+			} else {
+				ocsp_func = cred->certs[indx].ocsp_func;
+				ocsp_ptr = cred->certs[indx].ocsp_func_ptr;
+			}
+
 			selected_certs_set(session,
 					   &cred->certs[indx].
 					   cert_list[0],
 					   cred->certs[indx].
 					   cert_list_length,
 					   cred->certs[indx].pkey, 0,
-					   cred->certs[indx].ocsp_func,
-					   cred->certs[indx].ocsp_func_ptr);
+					   ocsp_func, ocsp_ptr);
 		} else {
-			selected_certs_set(session, NULL, 0, NULL, 0,
-						   NULL, NULL);
+			selected_certs_set(session, NULL, 0,
+					   NULL, 0, NULL, NULL);
 		}
 
 		result = 0;
@@ -1606,12 +1617,23 @@ _gnutls_server_select_cert(gnutls_session_t session, const gnutls_cipher_suite_e
 	 */
  finished:
 	if (idx >= 0) {
+		gnutls_status_request_ocsp_func2 ocsp_func;
+		void *ocsp_ptr;
+
+		if (cred->certs[idx].ocsp_func == NULL) {
+			ocsp_func = cred->glob_ocsp_func;
+			ocsp_ptr = cred->glob_ocsp_func_ptr;
+		} else {
+			ocsp_func = cred->certs[idx].ocsp_func;
+			ocsp_ptr = cred->certs[idx].ocsp_func_ptr;
+		}
+
 		selected_certs_set(session,
 				   &cred->certs[idx].cert_list[0],
 				   cred->certs[idx].cert_list_length,
 				   cred->certs[idx].pkey, 0,
-				   cred->certs[idx].ocsp_func,
-				   cred->certs[idx].ocsp_func_ptr);
+				   ocsp_func,
+				   ocsp_ptr);
 	} else {
 		gnutls_assert();
 		/* Certificate does not support REQUESTED_ALGO.  */

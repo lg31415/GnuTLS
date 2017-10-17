@@ -575,6 +575,10 @@ static int file_ocsp_func(gnutls_session_t session,
  * with the %GNUTLS_CERTIFICATE_API_V2 flag to make the set certificate
  * functions return an index usable by this function.
  *
+ * This function must be called after setting any certificates, and
+ * cannot be used for certificates that are provided via a callback --
+ * that is when gnutls_certificate_set_retrieve_function() is used.
+ *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
  *

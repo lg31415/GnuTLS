@@ -135,7 +135,9 @@ void doit(void)
 		fail("error in setting trust cert: %s\n", gnutls_strerror(ret));
 	}
 
-	test_cli_serv(xcred, clicred, "NORMAL", "localhost", &ocsp_resp1, check_response, NULL); /* the DNS name of the first cert */
+	test_cli_serv(xcred, clicred, "NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2", "localhost", &ocsp_resp1, check_response, NULL); /* the DNS name of the first cert */
+
+	test_cli_serv(xcred, clicred, "NORMAL:-VERS-TLS-ALL:+VERS-TLS1.3", "localhost", &ocsp_resp1, check_response, NULL); /* the DNS name of the first cert */
 
 	gnutls_certificate_free_credentials(xcred);
 	gnutls_certificate_free_credentials(clicred);

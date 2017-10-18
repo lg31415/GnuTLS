@@ -112,6 +112,8 @@ void doit(void)
 	assert(fwrite(server_ca3_key_pem, 1, strlen((char*)server_ca3_key_pem), fp)>0);
 	fclose(fp);
 
+	gnutls_certificate_set_flags(xcred, GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK);
+
 	/* set OCSP response */
 	ocspfile1 = get_tmpname(ocspname1);
 	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, 0);

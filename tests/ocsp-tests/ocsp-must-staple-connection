@@ -238,7 +238,7 @@ launch_bare_server $$ \
 	  --x509keyfile="${srcdir}/ocsp-tests/certs/server_good.key" \
 	  --x509certfile="${SERVER_CERT_FILE}" \
 	  --port="${TLS_SERVER_PORT}" \
-	  --ocsp-response="${OCSP_RESPONSE_FILE}"
+	  --ocsp-response="${OCSP_RESPONSE_FILE}" --ignore-ocsp-response-errors
 TLS_SERVER_PID="${!}"
 wait_server $TLS_SERVER_PID
 
@@ -274,7 +274,7 @@ launch_bare_server $$ \
 	  --x509keyfile="${srcdir}/ocsp-tests/certs/server_good.key" \
 	  --x509certfile="${SERVER_CERT_FILE}" \
 	  --port="${TLS_SERVER_PORT}" \
-	  --ocsp-response="${OCSP_RESPONSE_FILE}"
+	  --ocsp-response="${OCSP_RESPONSE_FILE}" --ignore-ocsp-response-errors
 TLS_SERVER_PID="${!}"
 wait_server $TLS_SERVER_PID
 

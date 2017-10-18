@@ -181,14 +181,21 @@ void doit(void)
 
 	/* set OCSP response1 */
 	ocspfile1 = get_tmpname(ocspname1);
-	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, index1);
-	if (ret < 0)
-		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
 	fp = fopen(ocspfile1, "wb");
 	if (fp == NULL)
 		fail("error in fopen\n");
 	assert(fwrite(ocsp_resp1.data, 1, ocsp_resp1.size, fp)>0);
 	fclose(fp);
+
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, index1);
+	if (ret != GNUTLS_E_OCSP_MISMATCH_WITH_CERTS)
+		fail("unexpected error in setting invalid ocsp file: %s\n", gnutls_strerror(ret));
+
+	gnutls_certificate_set_flags(xcred, GNUTLS_CERTIFICATE_API_V2|GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK);
+
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, index1);
+	if (ret < 0)
+		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
 
 	/* set OCSP response2 */
 	ocspfile2 = get_tmpname(ocspname2);

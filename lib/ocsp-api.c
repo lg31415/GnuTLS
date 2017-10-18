@@ -30,9 +30,11 @@
 #include <auth.h>
 #include <auth/cert.h>
 #include <handshake.h>
+#include <minmax.h>
 
 #ifdef ENABLE_OCSP
 
+#include <gnutls/ocsp.h>
 
 /**
  * gnutls_ocsp_status_request_get:
@@ -284,16 +286,46 @@ static int file_ocsp_func(gnutls_session_t session,
 			  gnutls_datum_t * ocsp_response)
 {
 	int ret;
-	const char *file = ptr;
+	certs_st *certs = ptr;
 
-	if (cinfo->cert_index > 0)
+	if (cinfo->cert_index >= MAX_OCSP_RESPONSE_FILES ||
+	    certs->ocsp_response_files[cinfo->cert_index] == NULL)
 		return GNUTLS_E_NO_CERTIFICATE_STATUS;
 
-	ret = gnutls_load_file(file, ocsp_response);
+	ret = gnutls_load_file(certs->ocsp_response_files[cinfo->cert_index], ocsp_response);
 	if (ret < 0)
 		return gnutls_assert_val(GNUTLS_E_NO_CERTIFICATE_STATUS);
 
 	return 0;
+}
+
+static
+unsigned resp_matches_pcert(gnutls_ocsp_resp_t resp, const gnutls_pcert_st *cert)
+{
+	gnutls_x509_crt_t crt;
+	int ret;
+	unsigned retval;
+
+	ret = gnutls_x509_crt_init(&crt);
+	if (ret < 0)
+		return 0;
+
+	ret = gnutls_x509_crt_import(crt, &cert->cert, GNUTLS_X509_FMT_DER);
+	if (ret < 0) {
+		gnutls_assert();
+		retval = 0;
+		goto cleanup;
+	}
+
+	ret = gnutls_ocsp_resp_check_crt(resp, 0, crt);
+	if (ret == 0)
+		retval = 1;
+	else
+		retval = 0;
+
+ cleanup:
+	gnutls_x509_crt_deinit(crt);
+	return retval;
 }
 
 /**
@@ -321,6 +353,11 @@ static int file_ocsp_func(gnutls_session_t session,
  * cannot be used for certificates that are provided via a callback --
  * that is when gnutls_certificate_set_retrieve_function() is used.
  *
+ * This function can be called multiple times since GnuTLS 3.6.xx
+ * when multiple responses which apply to the chain are available.
+ * If the response provided does not match any certificates present
+ * in the chain, the code %GNUTLS_E_OCSP_MISMATCH_WITH_CERTS is returned.
+ *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
  *
@@ -331,15 +368,67 @@ gnutls_certificate_set_ocsp_status_request_file(gnutls_certificate_credentials_t
 						const char *response_file,
 						unsigned idx)
 {
+	unsigned i, found = 0;
+	gnutls_datum_t der = {NULL, 0};
+	gnutls_ocsp_resp_t resp = NULL;
+	int ret;
+
 	if (idx >= sc->ncerts)
 		return gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
 
-	gnutls_free(sc->certs[idx].ocsp_response_file);
-	sc->certs[idx].ocsp_response_file = gnutls_strdup(response_file);
-	if (sc->certs[idx].ocsp_response_file == NULL)
-		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+	ret = gnutls_load_file(response_file, &der);
+	if (ret < 0)
+		return gnutls_assert_val(GNUTLS_E_FILE_ERROR);
 
-	return gnutls_certificate_set_ocsp_status_request_function3(sc, idx, file_ocsp_func, sc->certs[idx].ocsp_response_file, 0);
+	ret = gnutls_ocsp_resp_init(&resp);
+	if (ret < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	ret = gnutls_ocsp_resp_import(resp, &der);
+	if (ret < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	/* iterate through all certificates in chain, and add the response
+	 * to the certificate that it matches with.
+	 */
+	for (i=0;i<MIN(sc->certs[idx].cert_list_length, MAX_OCSP_RESPONSE_FILES);i++) {
+		if (sc->certs[idx].ocsp_response_files[i])
+			continue;
+
+		if (!resp_matches_pcert(resp, &sc->certs[idx].cert_list[i]))
+			continue;
+
+		_gnutls_debug_log("associating OCSP response with chain %d on pos %d\n", idx, i);
+		sc->certs[idx].ocsp_response_files[i] = gnutls_strdup(response_file);
+		if (sc->certs[idx].ocsp_response_files[i] == NULL) {
+			ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+			goto cleanup;
+		}
+
+		ret = gnutls_certificate_set_ocsp_status_request_function3(sc, idx,
+									   file_ocsp_func,
+									   &sc->certs[idx], 0);
+		if (ret < 0) {
+			gnutls_assert();
+			goto cleanup;
+		}
+		found = 1;
+		break;
+	}
+
+	if (!found)
+		ret = GNUTLS_E_OCSP_MISMATCH_WITH_CERTS;
+	else
+		ret = 0;
+ cleanup:
+	gnutls_free(der.data);
+	if (resp)
+		gnutls_ocsp_resp_deinit(resp);
+	return ret;
 }
 
 /**

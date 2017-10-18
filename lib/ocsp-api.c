@@ -357,6 +357,9 @@ unsigned resp_matches_pcert(gnutls_ocsp_resp_t resp, const gnutls_pcert_st *cert
  * when multiple responses which apply to the chain are available.
  * If the response provided does not match any certificates present
  * in the chain, the code %GNUTLS_E_OCSP_MISMATCH_WITH_CERTS is returned.
+ * To force the previous behavior set the flag %GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK
+ * in the certificate credentials structure. In that case, only the
+ * end-certificates OCSP response can be set.
  *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
@@ -375,6 +378,19 @@ gnutls_certificate_set_ocsp_status_request_file(gnutls_certificate_credentials_t
 
 	if (idx >= sc->ncerts)
 		return gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
+
+	if (sc->flags & GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK) {
+		/* quick load of first response */
+		gnutls_free(sc->certs[idx].ocsp_response_files[0]);
+
+		sc->certs[idx].ocsp_response_files[0] = gnutls_strdup(response_file);
+		if (sc->certs[idx].ocsp_response_files[0] == NULL)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+		return gnutls_certificate_set_ocsp_status_request_function3(
+				sc, idx, file_ocsp_func,
+				&sc->certs[idx], 0);
+	}
 
 	ret = gnutls_load_file(response_file, &der);
 	if (ret < 0)

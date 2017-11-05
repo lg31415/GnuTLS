@@ -147,7 +147,7 @@ int _gnutls13_send_certificate(gnutls_session_t session, unsigned again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);

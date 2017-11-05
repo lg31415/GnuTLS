@@ -194,7 +194,7 @@ int _gnutls13_send_certificate_verify(gnutls_session_t session, unsigned again)
 		gnutls_free(sig.data);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_VERIFY);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_VERIFY, NULL);
 
  cleanup:
 	gnutls_free(sig.data);

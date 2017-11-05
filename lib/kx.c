@@ -222,7 +222,7 @@ int _gnutls_send_server_kx_message(gnutls_session_t session, int again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_SERVER_KEY_EXCHANGE);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_SERVER_KEY_EXCHANGE, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);
@@ -263,7 +263,7 @@ int _gnutls_send_server_crt_request(gnutls_session_t session, int again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_REQUEST);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_REQUEST, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);
@@ -300,7 +300,7 @@ int _gnutls_send_client_kx_message(gnutls_session_t session, int again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CLIENT_KEY_EXCHANGE);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CLIENT_KEY_EXCHANGE, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);
@@ -356,7 +356,7 @@ _gnutls_send_client_certificate_verify(gnutls_session_t session, int again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_VERIFY);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_VERIFY, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);
@@ -419,7 +419,7 @@ int _gnutls_send_client_certificate(gnutls_session_t session, int again)
 	} else		/* TLS 1.0 or SSL 3.0 with a valid certificate 
 			 */
 #endif
-		return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT);
+		return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);
@@ -456,7 +456,7 @@ int _gnutls_send_server_certificate(gnutls_session_t session, int again)
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_CERTIFICATE_PKT, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);

@@ -66,7 +66,7 @@ SRP_COBJECTS = srp.c
 PSK_COBJECTS = psk.c
 
 COBJECTS = range.c record.c compress.c debug.c cipher.c	handshake-tls13.c	\
-	mbuffers.c buffers.c handshake.c num.c errors.c dh.c kx.c	\
+	mbuffers.c buffers.c handshake.c handshake-msg.c num.c errors.c dh.c kx.c	\
 	priority.c hash_int.c cipher_int.c session.c db.c x509_b64.c	\
 	hello_ext.c auth.c sslv2_compat.c datum.c session_pack.c mpi.c \
 	pk.c cert.c global.c constate.c anon_cred.c pkix_asn1_tab.c gnutls_asn1_tab.c	\

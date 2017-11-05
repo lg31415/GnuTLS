@@ -146,7 +146,7 @@ int _gnutls13_send_finished(gnutls_session_t session, unsigned again)
 		}
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_FINISHED);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_FINISHED, NULL);
 
 cleanup:
 	_mbuffer_xfree(&bufel);

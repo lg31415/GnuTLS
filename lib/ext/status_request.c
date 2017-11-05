@@ -577,7 +577,8 @@ _gnutls_send_server_certificate_status(gnutls_session_t session, int again)
 		_gnutls_free_datum(&priv->response);
 	}
 	return _gnutls_send_handshake(session, data_size ? bufel : NULL,
-				      GNUTLS_HANDSHAKE_CERTIFICATE_STATUS);
+				      GNUTLS_HANDSHAKE_CERTIFICATE_STATUS,
+				      NULL);
 }
 
 int _gnutls_recv_server_certificate_status(gnutls_session_t session)

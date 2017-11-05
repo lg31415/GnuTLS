@@ -67,7 +67,7 @@ int _gnutls13_send_encrypted_extensions(gnutls_session_t session, unsigned again
 		bufel = _gnutls_buffer_to_mbuffer(&buf);
 	}
 
-	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_ENCRYPTED_EXTENSIONS);
+	return _gnutls_send_handshake(session, bufel, GNUTLS_HANDSHAKE_ENCRYPTED_EXTENSIONS, NULL);
 
  cleanup:
 	_gnutls_buffer_clear(&buf);

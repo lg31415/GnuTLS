@@ -26,6 +26,7 @@
 
 #include "errors.h"
 #include "record.h"
+#include "handshake-msg.h"
 
 #define IMED_RET( str, ret, allow_alert) do { \
 	if (ret < 0) { \
@@ -54,7 +55,8 @@
 	} } while (0)
 
 int _gnutls_send_handshake(gnutls_session_t session, mbuffer_st * bufel,
-			   gnutls_handshake_description_t type);
+			   gnutls_handshake_description_t type,
+			   struct handshake_msg_st *hs);
 int _gnutls_recv_hello_request(gnutls_session_t session, void *data,
 			       uint32_t data_size);
 int _gnutls_recv_handshake(gnutls_session_t session,

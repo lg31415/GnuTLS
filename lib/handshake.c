@@ -34,6 +34,7 @@
 #include "mbuffers.h"
 #include "kx.h"
 #include "handshake.h"
+#include "handshake-msg.h"
 #include "num.h"
 #include "hash_int.h"
 #include "db.h"
@@ -85,17 +86,6 @@ handshake_hash_buffer_empty(gnutls_session_t session)
 	session->internals.handshake_hash_buffer.length = 0;
 	return;
 }
-
-static int
-handshake_hash_add_recvd(gnutls_session_t session,
-				 gnutls_handshake_description_t recv_type,
-				 uint8_t * header, uint16_t header_size,
-				 uint8_t * dataptr, uint32_t datalen);
-
-static int
-handshake_hash_add_sent(gnutls_session_t session,
-				gnutls_handshake_description_t type,
-				uint8_t * dataptr, uint32_t datalen);
 
 static int
 recv_hello_verify_request(gnutls_session_t session,
@@ -1036,10 +1026,9 @@ int
 _gnutls_send_handshake(gnutls_session_t session, mbuffer_st * bufel,
 		       gnutls_handshake_description_t type)
 {
-	int ret;
+	int pos = 0, ret;
 	uint8_t *data;
 	uint32_t datasize, i_datasize;
-	int pos = 0;
 
 	if (bufel == NULL) {
 		/* we are resuming a previously interrupted
@@ -1047,7 +1036,6 @@ _gnutls_send_handshake(gnutls_session_t session, mbuffer_st * bufel,
 		 */
 		ret = _gnutls_handshake_io_write_flush(session);
 		return ret;
-
 	}
 
 	/* first run */
@@ -1081,16 +1069,12 @@ _gnutls_send_handshake(gnutls_session_t session, mbuffer_st * bufel,
 			      session, _gnutls_handshake2str(type),
 			      (long) datasize);
 
-	/* Here we keep the handshake messages in order to hash them...
-	 */
-	if (type != GNUTLS_HANDSHAKE_HELLO_REQUEST)
-		if ((ret =
-		     handshake_hash_add_sent(session, type, data,
-						     datasize)) < 0) {
-			gnutls_assert();
-			_mbuffer_xfree(&bufel);
-			return ret;
-		}
+	ret = _gnutls_handshake_hash_add_sent(session, type, data, datasize);
+	if (ret < 0) {
+		gnutls_assert();
+		_mbuffer_xfree(&bufel);
+		return ret;
+	}
 
 	ret = call_hook_func(session, type, GNUTLS_HOOK_PRE, 0,
 			     _mbuffer_get_udata_ptr(bufel), _mbuffer_get_udata_size(bufel));
@@ -1144,122 +1128,6 @@ _gnutls_send_handshake(gnutls_session_t session, mbuffer_st * bufel,
 	return ret;
 }
 
-#define CHECK_SIZE(ll) \
-  if ((session->internals.max_handshake_data_buffer_size > 0) && \
-      (((ll) + session->internals.handshake_hash_buffer.length) > \
-       session->internals.max_handshake_data_buffer_size)) { \
-    _gnutls_debug_log("Handshake buffer length is %u (max: %u)\n", (unsigned)((ll) + session->internals.handshake_hash_buffer.length), (unsigned)session->internals.max_handshake_data_buffer_size); \
-    return gnutls_assert_val(GNUTLS_E_HANDSHAKE_TOO_LARGE); \
-    }
-
-/* This function add the handshake headers and the
- * handshake data to the handshake hash buffers. Needed
- * for the finished messages calculations.
- */
-static int
-handshake_hash_add_recvd(gnutls_session_t session,
-				 gnutls_handshake_description_t recv_type,
-				 uint8_t * header, uint16_t header_size,
-				 uint8_t * dataptr, uint32_t datalen)
-{
-	int ret;
-	const version_entry_st *vers = get_version(session);
-
-	if (unlikely(vers == NULL))
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-
-	if ((vers->id != GNUTLS_DTLS0_9 &&
-	     recv_type == GNUTLS_HANDSHAKE_HELLO_VERIFY_REQUEST) ||
-	    recv_type == GNUTLS_HANDSHAKE_HELLO_REQUEST)
-		return 0;
-
-	CHECK_SIZE(header_size + datalen);
-
-	session->internals.handshake_hash_buffer_prev_len =
-	    session->internals.handshake_hash_buffer.length;
-
-	if (vers->id != GNUTLS_DTLS0_9) {
-		ret =
-		    _gnutls_buffer_append_data(&session->internals.
-					       handshake_hash_buffer,
-					       header, header_size);
-		if (ret < 0)
-			return gnutls_assert_val(ret);
-	}
-	if (datalen > 0) {
-		ret =
-		    _gnutls_buffer_append_data(&session->internals.
-					       handshake_hash_buffer,
-					       dataptr, datalen);
-		if (ret < 0)
-			return gnutls_assert_val(ret);
-	}
-
-	/* save the size until client KX. That is because the TLS
-	 * session hash is calculated up to this message.
-	 */
-	if (recv_type == GNUTLS_HANDSHAKE_CLIENT_KEY_EXCHANGE)
-		session->internals.handshake_hash_buffer_client_kx_len =
-			session->internals.handshake_hash_buffer.length;
-	if (recv_type == GNUTLS_HANDSHAKE_FINISHED && session->security_parameters.entity == GNUTLS_CLIENT)
-		session->internals.handshake_hash_buffer_server_finished_len =
-			session->internals.handshake_hash_buffer.length;
-
-	return 0;
-}
-
-/* This function will store the handshake message we sent.
- */
-static int
-handshake_hash_add_sent(gnutls_session_t session,
-				gnutls_handshake_description_t type,
-				uint8_t * dataptr, uint32_t datalen)
-{
-	int ret;
-	const version_entry_st *vers = get_version(session);
-
-	if (unlikely(vers == NULL))
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-
-	/* We don't check for GNUTLS_HANDSHAKE_HELLO_VERIFY_REQUEST because it
-	 * is not sent via that channel.
-	 */
-	if (type != GNUTLS_HANDSHAKE_HELLO_REQUEST) {
-		CHECK_SIZE(datalen);
-
-		if (vers->id == GNUTLS_DTLS0_9) {
-			/* Old DTLS doesn't include the header in the MAC */
-			if (datalen < 12) {
-				gnutls_assert();
-				return GNUTLS_E_INTERNAL_ERROR;
-			}
-			dataptr += 12;
-			datalen -= 12;
-
-			if (datalen == 0)
-				return 0;
-		}
-
-		ret =
-		    _gnutls_buffer_append_data(&session->internals.
-					       handshake_hash_buffer,
-					       dataptr, datalen);
-		if (ret < 0)
-			return gnutls_assert_val(ret);
-
-		if (type == GNUTLS_HANDSHAKE_CLIENT_KEY_EXCHANGE)
-			session->internals.handshake_hash_buffer_client_kx_len =
-				session->internals.handshake_hash_buffer.length;
-		if (type == GNUTLS_HANDSHAKE_FINISHED && session->security_parameters.entity == GNUTLS_SERVER)
-			session->internals.handshake_hash_buffer_server_finished_len =
-				session->internals.handshake_hash_buffer.length;
-
-		return 0;
-	}
-
-	return 0;
-}
-
 /* This function will receive handshake messages of the given types,
  * and will pass the message to the right place in order to be processed.
  * E.g. for the SERVER_HELLO message (if it is expected), it will be
@@ -1292,7 +1160,7 @@ _gnutls_recv_handshake(gnutls_session_t session,
 		goto cleanup;
 	}
 
-	ret = handshake_hash_add_recvd(session, hsk.htype,
+	ret = _gnutls_handshake_hash_add_recvd(session, hsk.htype,
 				       hsk.header, hsk.header_size,
 				       hsk.data.data,
 				       hsk.data.length);
@@ -1707,6 +1575,8 @@ static int send_client_hello(gnutls_session_t session, int again)
 	unsigned add_sr_scsv = 0;
 	uint8_t session_id_len =
 	    session->internals.resumed_security_parameters.session_id_size;
+	struct handshake_msg_st *hs = NULL;
+	gnutls_handshake_description_t hs_type = GNUTLS_HANDSHAKE_CLIENT_HELLO;
 
 	/* note that rehandshake is different than resuming
 	 */
@@ -1714,6 +1584,10 @@ static int send_client_hello(gnutls_session_t session, int again)
 		rehandshake = 1;
 
 	if (again == 0) {
+		ret = _gnutls_handshake_msg_init(&hs, hs_type, session);
+		if (ret < 0)
+			return gnutls_assert_val(ret);
+
 		ret = _gnutls_buffer_init_handshake_mbuffer(&extdata);
 		if (ret < 0)
 			return gnutls_assert_val(ret);
@@ -1852,6 +1726,16 @@ static int send_client_hello(gnutls_session_t session, int again)
 			goto cleanup;
 		}
 
+		/* Set the first chunk of send data */
+		if (!IS_DTLS(session)) {
+			ret = _gnutls_handshake_msg_commit_from_buffer(session, hs,
+					&extdata, sizeof(mbuffer_st), HANDSHAKE_HEADER_SIZE(session));
+			if (ret < 0) {
+				gnutls_assert();
+				goto cleanup;
+			}
+		}
+
 		/* Generate and copy TLS extensions.
 		 */
 		if (session->internals.priorities->no_extensions == 0) {
@@ -1864,7 +1748,7 @@ static int send_client_hello(gnutls_session_t session, int again)
 			ret =
 			    _gnutls_gen_hello_extensions(session, &extdata,
 						   GNUTLS_EXT_FLAG_CLIENT_HELLO,
-						   type);
+						   type, hs);
 			if (ret < 0) {
 				gnutls_assert();
 				goto cleanup;
@@ -1872,13 +1756,15 @@ static int send_client_hello(gnutls_session_t session, int again)
 		}
 
 		bufel = _gnutls_buffer_to_mbuffer(&extdata);
+		_gnutls_handshake_msg_deinit(&hs);
 	}
 
 	return
-	    _gnutls_send_handshake(session, bufel,
-				   GNUTLS_HANDSHAKE_CLIENT_HELLO);
+	    _gnutls_send_handshake(session, bufel, hs_type);
 
  cleanup:
+ 	if (hs)
+ 		_gnutls_handshake_msg_deinit(&hs);
 	_gnutls_buffer_clear(&extdata);
 	return ret;
 }
@@ -1972,7 +1858,7 @@ static int send_server_hello(gnutls_session_t session, int again)
 					   (session->internals.resumed ==
 					    RESUME_TRUE) ?
 					   GNUTLS_EXT_MANDATORY :
-					   GNUTLS_EXT_ANY);
+					   GNUTLS_EXT_ANY, NULL);
 		if (ret < 0) {
 			gnutls_assert();
 			goto fail;

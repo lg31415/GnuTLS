@@ -24,6 +24,7 @@
 #define GNUTLS_EXTENSIONS_H
 
 #include <gnutls/gnutls.h>
+#include "handshake-msg.h"
 
 /* Functions for hello extension parsing.
  */
@@ -34,7 +35,8 @@ int _gnutls_parse_hello_extensions(gnutls_session_t session,
 int _gnutls_gen_hello_extensions(gnutls_session_t session,
 				 gnutls_buffer_st * extdata,
 				 gnutls_ext_flags_t msg,
-				 gnutls_ext_parse_type_t);
+				 gnutls_ext_parse_type_t parse_type,
+				 struct handshake_msg_st *hs);
 int _gnutls_hello_ext_init(void);
 void _gnutls_hello_ext_deinit(void);
 

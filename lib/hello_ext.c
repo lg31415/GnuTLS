@@ -29,6 +29,7 @@
 #include "gnutls_int.h"
 #include "hello_ext.h"
 #include "errors.h"
+#include "handshake-msg.h"
 #include "ext/max_record.h"
 #include <ext/server_name.h>
 #include <ext/srp.h>
@@ -307,7 +308,8 @@ int
 _gnutls_gen_hello_extensions(gnutls_session_t session,
 		       gnutls_buffer_st * buf,
 		       gnutls_ext_flags_t msg,
-		       gnutls_ext_parse_type_t parse_type)
+		       gnutls_ext_parse_type_t parse_type,
+		       struct handshake_msg_st *hs)
 {
 	int pos, ret;
 	size_t i;
@@ -345,10 +347,19 @@ _gnutls_gen_hello_extensions(gnutls_session_t session,
 		if (ret < 0)
 			return gnutls_assert_val(ret);
 
-		if (ret > 0)
+		if (ret > 0) {
 			_gnutls_handshake_log
 				    ("EXT[%p]: Sending extension %s/%d (%d bytes)\n",
 				     session, ctx.ext->name, (int)ctx.ext->tls_id, ret-4);
+
+			/* Update handshake send data buffer (if provided) */
+			if (hs && !IS_DTLS(session)) {
+				ret = _gnutls_handshake_msg_commit_from_buffer(session, hs,
+						buf, sizeof(mbuffer_st), HANDSHAKE_HEADER_SIZE(session));
+				if (ret < 0)
+					return gnutls_assert_val(ret);
+			}
+		}
 	}
 
 	ret = _gnutls_extv_append_final(buf, pos);

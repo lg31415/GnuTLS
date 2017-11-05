@@ -26,6 +26,7 @@
 
 #include "errors.h"
 #include "record.h"
+#include "handshake-msg.h"
 
 #define IMED_RET( str, ret, allow_alert) do { \
 	if (ret < 0) { \

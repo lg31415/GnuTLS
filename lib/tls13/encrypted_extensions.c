@@ -58,7 +58,7 @@ int _gnutls13_send_encrypted_extensions(gnutls_session_t session, unsigned again
 		if (ret < 0)
 			return gnutls_assert_val(ret);
 
-		ret = _gnutls_gen_hello_extensions(session, &buf, GNUTLS_EXT_FLAG_EE, GNUTLS_EXT_ANY);
+		ret = _gnutls_gen_hello_extensions(session, &buf, GNUTLS_EXT_FLAG_EE, GNUTLS_EXT_ANY, NULL);
 		if (ret < 0) {
 			gnutls_assert();
 			goto cleanup;

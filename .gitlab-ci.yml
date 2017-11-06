@@ -110,6 +110,7 @@ no-SSL-3.0.Fedora.x86_64:
   - mkdir -p build && cd build &&
     ../configure --cache-file ../cache/config.cache --disable-ssl3-support --disable-ssl2-support --disable-full-test-suite --enable-seccomp-tests --disable-doc --disable-guile &&
     make -j$(nproc) && make check -j$(nproc)
+  - cd ..
   tags:
   - shared
   except:
@@ -134,6 +135,7 @@ FIPS140-2.Fedora.x86_64:
   - make -j$(nproc)
   - GNUTLS_SKIP_FIPS_INTEGRITY_CHECKS=1 GNUTLS_FORCE_FIPS_MODE=1 make check -j$(nproc)
   - make check -j$(nproc)
+  - cd ..
   tags:
   - shared
   except:
@@ -306,6 +308,7 @@ MinGW64:
     rm -f tests/suite/mini-eagain2.c && mkdir -p build && cd build &&
     mingw64-configure --cache-file cache/config.cache --with-included-libtasn1 --disable-guile --disable-nls --with-included-unistring --enable-local-libopts --disable-non-suiteb-curves --disable-doc &&
     mingw64-make -j$(nproc) && mingw64-make -C tests check -j$(nproc)
+  - cd ..
   tags:
   - shared
   - docker
@@ -330,6 +333,7 @@ MinGW32:
     rm -f tests/suite/mini-eagain2.c && mkdir -p build && cd build &&
     mingw32-configure --cache-file cache/config.cache --with-included-libtasn1 --disable-guile --disable-nls --with-included-unistring --enable-local-libopts --disable-non-suiteb-curves --disable-doc &&
     mingw32-make -j$(nproc) && mingw32-make -C tests check -j$(nproc)
+  - cd ..
   tags:
   - shared
   - docker
@@ -429,6 +433,7 @@ Debian.x86_64:
   - make autoreconf && mkdir -p build && cd build &&
     ../configure --cache-file ../cache/config.cache --disable-doc --disable-guile &&
     make -j$(nproc) && make check -j$(nproc)
+  - cd ..
   tags:
   - shared
   except:
@@ -449,6 +454,7 @@ Debian.aarch64:
   - make autoreconf && mkdir -p build && cd build &&
     ../configure --cache-file ../cache/config.cache --disable-doc --disable-guile --disable-full-test-suite &&
     make -j$(nproc) && make check -j$(nproc)
+  - cd ..
   tags:
   - aarch64
   only:

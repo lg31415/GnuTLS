@@ -72,12 +72,11 @@ abi-coverage.Fedora:
   - tags
   artifacts:
     expire_in: 1 week
-    when: always
+    when: on_failure
     paths:
       - tests/*.log
       - tests/*/*.log
       - tests/suite/*/*.log
-      - GnuTLS*-coverage/*
 
 minimal.Fedora.x86_64:
   stage: stage1-testing

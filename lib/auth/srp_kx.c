@@ -720,8 +720,8 @@ group_check_g_n(gnutls_session_t session, bigint_t g, bigint_t n)
 	bigint_t q = NULL, two = NULL, w = NULL;
 	int ret;
 
-	if (_gnutls_mpi_get_nbits(n) < (session->internals.srp_prime_bits
-					? session->internals.srp_prime_bits
+	if (_gnutls_mpi_get_nbits(n) < (session->internals.dh_prime_bits
+					? session->internals.dh_prime_bits
 					: 2048)) {
 		gnutls_assert();
 		return GNUTLS_E_RECEIVED_ILLEGAL_PARAMETER;

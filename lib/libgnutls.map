@@ -1199,6 +1199,8 @@ GNUTLS_3_6_xx
 	gnutls_ext_get_current_msg;
 	gnutls_ocsp_status_request_get2;
 	gnutls_certificate_set_ocsp_status_request_function3;
+	gnutls_ocsp_resp_import2;
+	gnutls_ocsp_resp_export2;
 } GNUTLS_3_6_0;
 
 GNUTLS_FIPS140_3_4 {

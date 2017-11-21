@@ -129,6 +129,14 @@ flag = {
 };
 
 flag = {
+    name      = outder;
+    descrip   = "Use DER format for output of responses";
+    disabled;
+    disable   = "no";
+    doc       = "The output will be in DER or RAW format.";
+};
+
+flag = {
     name      = load-request;
     value     = Q;
     arg-type  = file;

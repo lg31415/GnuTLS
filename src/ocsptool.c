@@ -43,6 +43,7 @@
 #include "certtool-common.h"
 
 FILE *outfile;
+static unsigned int incert_format, outcert_format;
 static const char *outfile_name = NULL; /* to delete on exit */
 FILE *infile;
 static unsigned int encoding;
@@ -147,9 +148,14 @@ static void _response_info(const gnutls_datum_t * data)
 		app_exit(1);
 	}
 
-	ret = gnutls_ocsp_resp_import(resp, data);
+	ret = gnutls_ocsp_resp_import2(resp, data, incert_format);
+	if (ret == GNUTLS_E_BASE64_UNEXPECTED_HEADER_ERROR) {
+		int ret2 = gnutls_ocsp_resp_import(resp, data);
+		if (ret2 >= 0)
+			ret = ret2;
+	}
 	if (ret < 0) {
-		fprintf(stderr, "importing response: %s\n",
+		fprintf(stderr, "error importing response: %s\n",
 			gnutls_strerror(ret));
 		app_exit(1);
 	}
@@ -168,8 +174,20 @@ static void _response_info(const gnutls_datum_t * data)
 		app_exit(1);
 	}
 
-	printf("%.*s", buf.size, buf.data);
+	printf("%.*s\n", buf.size, buf.data);
 	gnutls_free(buf.data);
+
+	if (outcert_format == GNUTLS_X509_FMT_PEM) {
+		ret = gnutls_ocsp_resp_export2(resp, &buf, outcert_format);
+		if (ret < 0) {
+			fprintf(stderr, "error exporting response: %s\n",
+				gnutls_strerror(ret));
+			app_exit(1);
+		}
+
+		printf("%.*s", buf.size, buf.data);
+		gnutls_free(buf.data);
+	}
 
 	gnutls_ocsp_resp_deinit(resp);
 }
@@ -607,6 +625,16 @@ int main(int argc, char **argv)
 
 	gnutls_global_set_log_function(tls_log_func);
 	gnutls_global_set_log_level(OPT_VALUE_DEBUG);
+
+	if (HAVE_OPT(INDER))
+		incert_format = GNUTLS_X509_FMT_DER;
+	else
+		incert_format = GNUTLS_X509_FMT_PEM;
+
+	if (HAVE_OPT(OUTDER))
+		outcert_format = GNUTLS_X509_FMT_DER;
+	else
+		outcert_format = GNUTLS_X509_FMT_PEM;
 
 	if (HAVE_OPT(VERIFY_ALLOW_BROKEN))
 		vflags |= GNUTLS_VERIFY_ALLOW_BROKEN;

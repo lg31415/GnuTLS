@@ -116,15 +116,16 @@ void doit(void)
 
 	/* set OCSP response */
 	ocspfile1 = get_tmpname(ocspname1);
-	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, 0);
-	if (ret < 0)
-		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
-
 	fp = fopen(ocspfile1, "wb");
 	if (fp == NULL)
 		fail("error in fopen\n");
 	assert(fwrite(ocsp_resp1.data, 1, ocsp_resp1.size, fp)>0);
 	fclose(fp);
+
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, 0);
+	if (ret < 0)
+		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
+
 
 	/* make sure that our invalid OCSP responses are not considered in verification
 	 */

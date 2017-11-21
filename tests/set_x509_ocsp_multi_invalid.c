@@ -198,27 +198,27 @@ void doit(void)
 
 	/* set OCSP response2 */
 	ocspfile2 = get_tmpname(ocspname2);
-	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile2, index2);
-	if (ret < 0)
-		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
-
 	fp = fopen(ocspfile2, "wb");
 	if (fp == NULL)
 		fail("error in fopen\n");
 	assert(fwrite(ocsp_resp2.data, 1, ocsp_resp2.size, fp)>0);
 	fclose(fp);
 
-	/* set OCSP response3 */
-	ocspfile3 = get_tmpname(ocspname3);
-	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile3, index3);
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile2, index2);
 	if (ret < 0)
 		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
 
+	/* set OCSP response3 */
+	ocspfile3 = get_tmpname(ocspname3);
 	fp = fopen(ocspfile3, "wb");
 	if (fp == NULL)
 		fail("error in fopen\n");
 	assert(fwrite(ocsp_resp3.data, 1, ocsp_resp3.size, fp)>0);
 	fclose(fp);
+
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile3, index3);
+	if (ret < 0)
+		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
 
 	/* set an OCSP response outside the bounds */
 	assert(gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile3, 34) == GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);

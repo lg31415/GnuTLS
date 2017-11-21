@@ -1913,6 +1913,16 @@ gnutls_certificate_set_ocsp_status_request_file
 (gnutls_certificate_credentials_t res, const char *response_file,
  unsigned idx);
 
+int
+gnutls_certificate_set_ocsp_status_request_file2
+(gnutls_certificate_credentials_t res, const char *response_file,
+ unsigned idx, gnutls_x509_crt_fmt_t fmt);
+
+int
+gnutls_certificate_set_ocsp_status_request_mem
+(gnutls_certificate_credentials_t res, const gnutls_datum_t *resp,
+ unsigned idx, gnutls_x509_crt_fmt_t fmt);
+
 int gnutls_ocsp_status_request_enable_client(gnutls_session_t session,
 					     gnutls_datum_t * responder_id,
 					     size_t responder_id_size,

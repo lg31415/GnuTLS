@@ -180,12 +180,17 @@ void doit(void)
 	fclose(fp);
 
 	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile3, index1);
-	if (ret != GNUTLS_E_OCSP_MISMATCH_WITH_CERTS)
-		fail("setting duplicate didn't fail as expected: %s\n", gnutls_strerror(ret));
+	if (ret != 0)
+		fail("setting duplicate didn't succeed as expected: %s\n", gnutls_strerror(ret));
 
 	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile3, index2);
 	if (ret != GNUTLS_E_OCSP_MISMATCH_WITH_CERTS)
 		fail("setting invalid didn't fail as expected: %s\n", gnutls_strerror(ret));
+
+	/* re-set the previous duplicate set for index1 to the expected*/
+	ret = gnutls_certificate_set_ocsp_status_request_file(xcred, ocspfile1, index1);
+	if (ret < 0)
+		fail("ocsp file set failed: %s\n", gnutls_strerror(ret));
 
 	/* set an intermediate CA OCSP response */
 	fp = fopen(ocspfile3, "wb");

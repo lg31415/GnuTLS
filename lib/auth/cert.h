@@ -35,7 +35,12 @@ typedef struct legacy_ocsp_func_st {
 	void *ptr; /* private data of legacy_ocsp_func */
 } legacy_ocsp_func_st;
 
-#define MAX_OCSP_RESPONSE_FILES 8
+typedef struct ocsp_data_st {
+	gnutls_datum_t response;
+	time_t exptime;
+} ocsp_data_st;
+
+#define MAX_OCSP_RESPONSES 8
 
 typedef struct {
 	gnutls_pcert_st *cert_list;	/* a certificate chain */
@@ -47,7 +52,7 @@ typedef struct {
 	gnutls_status_request_ocsp_func2 ocsp_func;
 	void *ocsp_func_ptr; /* private data of ocsp_func */
 
-	char *ocsp_response_files[MAX_OCSP_RESPONSE_FILES]; /* corresponding OCSP response file */
+	ocsp_data_st ocsp_data[MAX_OCSP_RESPONSES]; /* corresponding OCSP response file */
 
 	/* the private key corresponding to certificate */
 	gnutls_privkey_t pkey;

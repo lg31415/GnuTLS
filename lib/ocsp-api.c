@@ -35,6 +35,7 @@
 #ifdef ENABLE_OCSP
 
 #include <gnutls/ocsp.h>
+#include "x509/ocsp.h"
 
 /**
  * gnutls_ocsp_status_request_get:
@@ -280,19 +281,24 @@ gnutls_certificate_set_ocsp_status_request_function3(gnutls_certificate_credenti
 	return 0;
 }
 
-static int file_ocsp_func(gnutls_session_t session,
-			  const gnutls_cert_info_st *cinfo,
-			  void *ptr,
-			  gnutls_datum_t * ocsp_response)
+static int mem_ocsp_func(gnutls_session_t session,
+			 const gnutls_cert_info_st *cinfo,
+			 void *ptr,
+			 gnutls_datum_t * ocsp_response)
 {
 	int ret;
 	certs_st *certs = ptr;
 
-	if (cinfo->cert_index >= MAX_OCSP_RESPONSE_FILES ||
-	    certs->ocsp_response_files[cinfo->cert_index] == NULL)
+	if (cinfo->cert_index >= MAX_OCSP_RESPONSES ||
+	    certs->ocsp_data[cinfo->cert_index].response.data == NULL)
 		return GNUTLS_E_NO_CERTIFICATE_STATUS;
 
-	ret = gnutls_load_file(certs->ocsp_response_files[cinfo->cert_index], ocsp_response);
+	if (certs->ocsp_data[cinfo->cert_index].exptime != 0 &&
+	    gnutls_time(0) >= certs->ocsp_data[cinfo->cert_index].exptime)
+		return gnutls_assert_val(GNUTLS_E_NO_CERTIFICATE_STATUS);
+
+	ret = _gnutls_set_datum(ocsp_response, certs->ocsp_data[cinfo->cert_index].response.data,
+				certs->ocsp_data[cinfo->cert_index].response.size);
 	if (ret < 0)
 		return gnutls_assert_val(GNUTLS_E_NO_CERTIFICATE_STATUS);
 
@@ -334,14 +340,9 @@ unsigned resp_matches_pcert(gnutls_ocsp_resp_t resp, const gnutls_pcert_st *cert
  * @response_file: a filename of the OCSP response
  * @idx: is a certificate index as returned by gnutls_certificate_set_key() and friends
  *
- * This function sets the filename of an OCSP response, that will be
+ * This function loads the provided OCSP response file, to be
  * sent to the client if requests an OCSP certificate status for
  * the certificate chain specified by @idx.
- *
- * This is a convenience function which may be inefficient on busy servers since
- * the file is opened on every access. Use 
- * gnutls_certificate_set_ocsp_status_request_function2() to fine-tune
- * file accesses.
  *
  * Note: the ability to set multiple OCSP responses per credential
  * structure via the index @idx was added in version 3.5.6. To keep
@@ -357,9 +358,10 @@ unsigned resp_matches_pcert(gnutls_ocsp_resp_t resp, const gnutls_pcert_st *cert
  * when multiple responses which apply to the chain are available.
  * If the response provided does not match any certificates present
  * in the chain, the code %GNUTLS_E_OCSP_MISMATCH_WITH_CERTS is returned.
- * To force the previous behavior set the flag %GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK
+ *
+ * To revert to the previous behavior set the flag %GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK
  * in the certificate credentials structure. In that case, only the
- * end-certificates OCSP response can be set.
+ * end-certificate's OCSP response can be set.
  *
  * Returns: On success, %GNUTLS_E_SUCCESS (0) is returned,
  *   otherwise a negative error code is returned.
@@ -371,62 +373,111 @@ gnutls_certificate_set_ocsp_status_request_file(gnutls_certificate_credentials_t
 						const char *response_file,
 						unsigned idx)
 {
-	unsigned i, found = 0;
-	gnutls_datum_t der = {NULL, 0};
-	gnutls_ocsp_resp_t resp = NULL;
+	int ret;
+	ret = gnutls_certificate_set_ocsp_status_request_file2(sc, response_file,
+							       idx, GNUTLS_X509_FMT_DER);
+	if (ret >= 0)
+		return 0;
+	else
+		return ret;
+}
+
+/**
+ * gnutls_certificate_set_ocsp_status_request_file2:
+ * @sc: is a credentials structure.
+ * @response_file: a filename of the OCSP response
+ * @idx: is a certificate index as returned by gnutls_certificate_set_key() and friends
+ * @fmt: is PEM or DER
+ *
+ * This function loads the provided OCSP response file, to be
+ * sent to the client if requests an OCSP certificate status for
+ * the certificate chain specified by @idx.
+ *
+ * When a PEM-file is requested, multiple OCSP responses can be loaded
+ * using the "BEGIN OCSP RESPONSE" header.
+ *
+ * Note: the ability to set multiple OCSP responses per credential
+ * structure via the index @idx was added in version 3.5.6. To keep
+ * backwards compatibility, it requires using gnutls_certificate_set_flags()
+ * with the %GNUTLS_CERTIFICATE_API_V2 flag to make the set certificate
+ * functions return an index usable by this function.
+ *
+ * This function must be called after setting any certificates, and
+ * cannot be used for certificates that are provided via a callback --
+ * that is when gnutls_certificate_set_retrieve_function() is used.
+ *
+ * This function can be called multiple times when multiple responses
+ * applicable to the certificate chain are available.
+ * If the response provided does not match any certificates present
+ * in the chain, the code %GNUTLS_E_OCSP_MISMATCH_WITH_CERTS is returned.
+ *
+ * Returns: On success, the number of loaded responses is returned,
+ *   otherwise a negative error code.
+ *
+ * Since: 3.6.xx
+ **/
+int
+gnutls_certificate_set_ocsp_status_request_file2(gnutls_certificate_credentials_t sc,
+						 const char *response_file,
+						 unsigned idx,
+						 gnutls_x509_crt_fmt_t fmt)
+{
+	gnutls_datum_t raw = {NULL, 0};
 	int ret;
 
 	if (idx >= sc->ncerts)
 		return gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
 
-	if (sc->flags & GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK) {
-		/* quick load of first response */
-		gnutls_free(sc->certs[idx].ocsp_response_files[0]);
-
-		sc->certs[idx].ocsp_response_files[0] = gnutls_strdup(response_file);
-		if (sc->certs[idx].ocsp_response_files[0] == NULL)
-			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-
-		return gnutls_certificate_set_ocsp_status_request_function3(
-				sc, idx, file_ocsp_func,
-				&sc->certs[idx], 0);
-	}
-
-	ret = gnutls_load_file(response_file, &der);
+	ret = gnutls_load_file(response_file, &raw);
 	if (ret < 0)
 		return gnutls_assert_val(GNUTLS_E_FILE_ERROR);
 
-	ret = gnutls_ocsp_resp_init(&resp);
-	if (ret < 0) {
-		gnutls_assert();
-		goto cleanup;
-	}
+	ret = gnutls_certificate_set_ocsp_status_request_mem(sc, &raw, idx, fmt);
+	gnutls_free(raw.data);
+	return ret;
+}
 
-	ret = gnutls_ocsp_resp_import(resp, &der);
-	if (ret < 0) {
-		gnutls_assert();
-		goto cleanup;
-	}
+static int append_response(gnutls_certificate_credentials_t sc, unsigned idx,
+			   gnutls_ocsp_resp_t resp, const gnutls_datum_t *der)
+{
+	int ret;
+	unsigned i, found = 0;
+	unsigned try_already_set = 0;
+	time_t t;
 
+ retry:
 	/* iterate through all certificates in chain, and add the response
 	 * to the certificate that it matches with.
 	 */
-	for (i=0;i<MIN(sc->certs[idx].cert_list_length, MAX_OCSP_RESPONSE_FILES);i++) {
-		if (sc->certs[idx].ocsp_response_files[i])
+	for (i=0;i<MIN(sc->certs[idx].cert_list_length, MAX_OCSP_RESPONSES);i++) {
+		if (!try_already_set && sc->certs[idx].ocsp_data[i].response.data)
 			continue;
 
 		if (!resp_matches_pcert(resp, &sc->certs[idx].cert_list[i]))
 			continue;
 
 		_gnutls_debug_log("associating OCSP response with chain %d on pos %d\n", idx, i);
-		sc->certs[idx].ocsp_response_files[i] = gnutls_strdup(response_file);
-		if (sc->certs[idx].ocsp_response_files[i] == NULL) {
-			ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+		t = _gnutls_ocsp_get_validity(resp);
+		/* if already invalid */
+		if (t == (time_t)-1)
+			continue;
+
+		if (t >= 0)
+			sc->certs[idx].ocsp_data[i].exptime = t;
+		else
+			sc->certs[idx].ocsp_data[i].exptime = 0;
+
+		gnutls_free(sc->certs[idx].ocsp_data[i].response.data);
+		ret = _gnutls_set_datum(&sc->certs[idx].ocsp_data[i].response,
+					der->data, der->size);
+		if (ret < 0) {
+			gnutls_assert();
 			goto cleanup;
 		}
 
 		ret = gnutls_certificate_set_ocsp_status_request_function3(sc, idx,
-									   file_ocsp_func,
+									   mem_ocsp_func,
 									   &sc->certs[idx], 0);
 		if (ret < 0) {
 			gnutls_assert();
@@ -436,10 +487,155 @@ gnutls_certificate_set_ocsp_status_request_file(gnutls_certificate_credentials_t
 		break;
 	}
 
-	if (!found)
+	if (!found) {
+		/* slow path; if we found no matching certificate for the OCSP
+		 * response, try all the existing, even if a response is already
+		 * given. */
+		if (!try_already_set) {
+			try_already_set = 1;
+			goto retry;
+		}
 		ret = GNUTLS_E_OCSP_MISMATCH_WITH_CERTS;
-	else
+	} else
 		ret = 0;
+
+ cleanup:
+	return ret;
+}
+
+#define PEM_OCSP_RESPONSE "OCSP RESPONSE"
+#define FULL_PEM_OCSP_RESPONSE "-----BEGIN OCSP RESPONSE"
+
+/**
+ * gnutls_certificate_set_ocsp_status_request_mem:
+ * @sc: is a credentials structure.
+ * @resp_data: a memory buffer holding an OCSP response
+ * @idx: is a certificate index as returned by gnutls_certificate_set_key() and friends
+ * @fmt: is PEM or DER
+ *
+ * This function sets the filename of an OCSP response, that will be
+ * sent to the client if requests an OCSP certificate status for
+ * the certificate chain specified by @idx.
+ *
+ * Note: the ability to set multiple OCSP responses per credential
+ * structure via the index @idx was added in version 3.5.6. To keep
+ * backwards compatibility, it requires using gnutls_certificate_set_flags()
+ * with the %GNUTLS_CERTIFICATE_API_V2 flag to make the set certificate
+ * functions return an index usable by this function.
+ *
+ * This function must be called after setting any certificates, and
+ * cannot be used for certificates that are provided via a callback --
+ * that is when gnutls_certificate_set_retrieve_function() is used.
+ *
+ * This function can be called multiple times when multiple responses which
+ * apply to the certificate chain are available.
+ * If the response provided does not match any certificates present
+ * in the chain, the code %GNUTLS_E_OCSP_MISMATCH_WITH_CERTS is returned.
+ *
+ * Returns: On success, the number of loaded responses is returned,
+ *   otherwise a negative error code.
+ *
+ * Since: 3.6.xx
+ **/
+int
+gnutls_certificate_set_ocsp_status_request_mem(gnutls_certificate_credentials_t sc,
+					       const gnutls_datum_t *resp_data,
+					       unsigned idx,
+					       gnutls_x509_crt_fmt_t fmt)
+
+{
+	gnutls_datum_t der = {NULL, 0};
+	gnutls_ocsp_resp_t resp = NULL;
+	int ret;
+	unsigned int nresp = 0;
+
+	ret = gnutls_ocsp_resp_init(&resp);
+	if (ret < 0) {
+		return gnutls_assert_val(ret);
+	}
+
+	if (fmt == GNUTLS_X509_FMT_PEM) {
+		/* load multiple responses */
+		gnutls_datum_t p = {resp_data->data, resp_data->size};
+
+		p.data = memmem(p.data, p.size, FULL_PEM_OCSP_RESPONSE,
+				sizeof(FULL_PEM_OCSP_RESPONSE)-1);
+		if (p.data == NULL) {
+			ret = gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
+			goto cleanup;
+		}
+
+		p.size -= p.data - resp_data->data;
+		if (p.size <= 0) {
+			ret = gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
+			goto cleanup;
+		}
+
+		do {
+			ret = gnutls_pem_base64_decode2(PEM_OCSP_RESPONSE, &p, &der);
+			if (ret < 0) {
+				gnutls_assert();
+				goto cleanup;
+			}
+
+			ret = gnutls_certificate_set_ocsp_status_request_mem(sc, &der, idx,
+									     GNUTLS_X509_FMT_DER);
+			if (ret < 0) {
+				gnutls_assert();
+				goto cleanup;
+			}
+			nresp++;
+
+			gnutls_free(der.data);
+			der.data = NULL;
+
+			p.data++;
+			p.size--;
+
+			p.data = memmem(p.data, p.size, FULL_PEM_OCSP_RESPONSE,
+					sizeof(FULL_PEM_OCSP_RESPONSE)-1);
+			if (p.data == NULL)
+				break;
+			p.size = resp_data->size - (p.data - resp_data->data);
+		} while(p.size > 0);
+
+		ret = nresp;
+	} else {
+		/* DER: load a single response */
+
+		if (sc->flags & GNUTLS_CERTIFICATE_SKIP_OCSP_RESPONSE_CHECK) {
+			/* quick load of first response */
+			gnutls_free(sc->certs[idx].ocsp_data[0].response.data);
+
+			ret = _gnutls_set_datum(&sc->certs[idx].ocsp_data[0].response,
+						resp_data->data,
+						resp_data->size);
+			if (ret < 0) {
+				gnutls_assert();
+				goto cleanup;
+			}
+
+			ret = gnutls_certificate_set_ocsp_status_request_function3(
+				sc, idx, mem_ocsp_func,
+				&sc->certs[idx], 0);
+			goto cleanup;
+		}
+
+		ret = gnutls_ocsp_resp_import2(resp, resp_data, GNUTLS_X509_FMT_DER);
+		if (ret < 0) {
+			gnutls_assert();
+			goto cleanup;
+		}
+
+		ret = append_response(sc, idx, resp, resp_data);
+		if (ret < 0) {
+			gnutls_assert();
+			goto cleanup;
+		}
+
+		ret = 1;
+	}
+
  cleanup:
 	gnutls_free(der.data);
 	if (resp)

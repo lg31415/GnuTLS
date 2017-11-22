@@ -96,6 +96,7 @@ void doit(void)
 	char certname1[TMPNAME_SIZE], ocspname1[TMPNAME_SIZE];
 	FILE *fp;
 	unsigned index1;
+	time_t t;
 
 	global_init();
 	gnutls_global_set_time_function(mytime);
@@ -159,8 +160,19 @@ void doit(void)
 		fail("error in setting trust cert: %s\n", gnutls_strerror(ret));
 	}
 
-	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.2", "localhost", &ocsp_ca3_localhost_unknown, check_response, NULL);
+	t = gnutls_certificate_get_ocsp_expiration(xcred, 0, 0, 0);
+	if (t != 1509625639)
+		fail("error in OCSP validity time: %ld\n", (long int)t);
 
+	t = gnutls_certificate_get_ocsp_expiration(xcred, 0, 1, 0);
+	if (t != 1509625639)
+		fail("error in OCSP validity time: %ld\n", (long int)t);
+
+	t = gnutls_certificate_get_ocsp_expiration(xcred, 0, -1, 0);
+	if (t != 1509625639)
+		fail("error in OCSP validity time: %ld\n", (long int)t);
+
+	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.2", "localhost", &ocsp_ca3_localhost_unknown, check_response, NULL);
 	test_cli_serv(xcred, clicred, "NORMAL:-ECDHE-ECDSA:-VERS-TLS-ALL:+VERS-TLS1.3", "localhost", &ocsp_ca3_localhost_unknown, check_response, NULL);
 
 	gnutls_certificate_free_credentials(xcred);

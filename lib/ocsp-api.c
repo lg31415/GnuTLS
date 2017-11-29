@@ -239,13 +239,15 @@ gnutls_certificate_set_ocsp_status_request_function2(gnutls_certificate_credenti
  * and will be deinitialized by the caller.
  *
  * This function allows a server to provide more than a single OCSP responses
- * corresponding to each certificate in the certificate chain.
+ * corresponding to each certificate in the certificate chains already present
+ * in the credential structure.
  *
  * When the flag %GNUTLS_OCSP_CB_GLOBAL_SET is specified in @flags, this
- * function can be used to set a callback that is used even when the
- * certificates are provided by the application via a callback. That is,
- * when gnutls_certificate_set_retrieve_function() and friends are used.
- * In that case the callback will be called with the selected certificate.
+ * function can set a callback that is used even when the certificates
+ * are not present in the credentials but provided by the application via
+ * a callback. That is, when gnutls_certificate_set_retrieve_function() and
+ * friends are used. In that case the callback will be called with the
+ * selected certificate as parameter.
  *
  * Note: the ability to set multiple OCSP responses per credential
  * structure via the index @idx was added in version 3.5.6. To keep

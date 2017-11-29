@@ -36,6 +36,7 @@
 
 #include <gnutls/ocsp.h>
 #include "x509/ocsp.h"
+#include "x509.h"
 
 /**
  * gnutls_ocsp_status_request_get:
@@ -517,9 +518,6 @@ static int append_response(gnutls_certificate_credentials_t sc, unsigned idx,
 }
 
 
-#define PEM_OCSP_RESPONSE "OCSP RESPONSE"
-#define FULL_PEM_OCSP_RESPONSE "-----BEGIN OCSP RESPONSE"
-
 /**
  * gnutls_certificate_set_ocsp_status_request_mem:
  * @sc: is a credentials structure.
@@ -574,8 +572,8 @@ gnutls_certificate_set_ocsp_status_request_mem(gnutls_certificate_credentials_t 
 		/* load multiple responses */
 		gnutls_datum_t p = {resp_data->data, resp_data->size};
 
-		p.data = memmem(p.data, p.size, FULL_PEM_OCSP_RESPONSE,
-				sizeof(FULL_PEM_OCSP_RESPONSE)-1);
+		p.data = memmem(p.data, p.size, PEM_OCSP_RESPONSE,
+				sizeof(PEM_OCSP_RESPONSE)-1);
 		if (p.data == NULL) {
 			ret = gnutls_assert_val(GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE);
 			goto cleanup;
@@ -588,7 +586,7 @@ gnutls_certificate_set_ocsp_status_request_mem(gnutls_certificate_credentials_t 
 		}
 
 		do {
-			ret = gnutls_pem_base64_decode2(PEM_OCSP_RESPONSE, &p, &der);
+			ret = gnutls_pem_base64_decode2(BARE_PEM_OCSP_RESPONSE, &p, &der);
 			if (ret < 0) {
 				gnutls_assert();
 				goto cleanup;
@@ -608,8 +606,8 @@ gnutls_certificate_set_ocsp_status_request_mem(gnutls_certificate_credentials_t 
 			p.data++;
 			p.size--;
 
-			p.data = memmem(p.data, p.size, FULL_PEM_OCSP_RESPONSE,
-					sizeof(FULL_PEM_OCSP_RESPONSE)-1);
+			p.data = memmem(p.data, p.size, PEM_OCSP_RESPONSE,
+					sizeof(PEM_OCSP_RESPONSE)-1);
 			if (p.data == NULL)
 				break;
 			p.size = resp_data->size - (p.data - resp_data->data);

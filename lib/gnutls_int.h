@@ -314,6 +314,8 @@ typedef enum extensions_t {
 	GNUTLS_EXTENSION_SAFE_RENEGOTIATION,
 	GNUTLS_EXTENSION_SERVER_NAME,
 	GNUTLS_EXTENSION_COOKIE,
+	GNUTLS_EXTENSION_PSK_KE_MODES,
+	GNUTLS_EXTENSION_PRE_SHARED_KEY,
 	GNUTLS_EXTENSION_DUMBFW, /* this must always be the last */
 	GNUTLS_EXTENSION_MAX /* not real extension - used for iterators */
 } extensions_t;
@@ -1169,6 +1171,8 @@ typedef struct {
 #define HSK_FALSE_START_USED (1<<8) /* TLS1.2 only */
 #define HSK_HAVE_FFDHE (1<<9) /* whether the peer has advertized at least an FFDHE group */
 #define HSK_USED_FFDHE (1<<10) /* whether ffdhe was actually negotiated and used */
+#define HSK_PSK_KE_MODES_SENT (1<<11)
+#define HSK_PSK_KE_MODES_RECEIVED (1<<12)
 	/* The hsk_flags are for use within the ongoing handshake;
 	 * they are reset to zero prior to handshake start by gnutls_handshake. */
 	unsigned hsk_flags;

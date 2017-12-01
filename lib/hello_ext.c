@@ -46,6 +46,8 @@
 #include <ext/alpn.h>
 #include <ext/dumbfw.h>
 #include <ext/key_share.h>
+#include <ext/pre_shared_key.h>
+#include <ext/psk_ke_modes.h>
 #include <ext/etm.h>
 #include <ext/cookie.h>
 #include "extv.h"
@@ -87,6 +89,8 @@ static hello_ext_entry_st const *extfunc[MAX_EXT_TYPES+1] = {
 #ifdef ENABLE_ALPN
 	[GNUTLS_EXTENSION_ALPN] = &ext_mod_alpn,
 #endif
+	[GNUTLS_EXTENSION_PSK_KE_MODES] = &ext_psk_ke_modes,
+	[GNUTLS_EXTENSION_PRE_SHARED_KEY] = &ext_pre_shared_key,
 	/* This must be the last extension registered.
 	 */
 	[GNUTLS_EXTENSION_DUMBFW] = &ext_mod_dumbfw,

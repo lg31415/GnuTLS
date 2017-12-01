@@ -67,6 +67,8 @@ gnutls_psk_allocate_client_credentials(gnutls_psk_client_credentials_t *
 	if (*sc == NULL)
 		return GNUTLS_E_MEMORY_ERROR;
 
+	/* TLS 1.3 - Default binder HMAC algorithm is SHA-256 */
+	(*sc)->tls13_binder_algo = GNUTLS_MAC_SHA256;
 	return 0;
 }
 
@@ -182,6 +184,8 @@ gnutls_psk_allocate_server_credentials(gnutls_psk_server_credentials_t *
 	if (*sc == NULL)
 		return GNUTLS_E_MEMORY_ERROR;
 
+	/* TLS 1.3 - Default binder HMAC algorithm is SHA-256 */
+	(*sc)->tls13_binder_algo = GNUTLS_MAC_SHA256;
 	return 0;
 }
 

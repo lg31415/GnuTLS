@@ -50,6 +50,7 @@
 #include <system.h>
 #include <constate.h>	/* gnutls_epoch_get */
 #include <handshake.h>	/* remaining_time() */
+#include <hello_ext.h>  /* _gnutls_ext_set_full_client_hello */
 #include <errno.h>
 #include <system.h>
 #include "debug.h"
@@ -1252,6 +1253,9 @@ int _gnutls_parse_record_buffered_msgs(gnutls_session_t session)
 			/* if packet is complete then return it
 			 */
 			if (recv_buf[0].length == recv_buf[0].data.length) {
+				/* Reference the full ClientHello in case an extension needs it */
+				if (recv_buf->htype == GNUTLS_HANDSHAKE_CLIENT_HELLO)
+					_gnutls_ext_set_full_client_hello(session, recv_buf);
 				return 0;
 			}
 			bufel =

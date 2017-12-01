@@ -352,6 +352,7 @@ _gnutls_gen_hello_extensions(gnutls_session_t session,
 		return gnutls_assert_val(ret);
 
 	pos = ret;
+	_gnutls_ext_set_extensions_offset(session, pos);
 
 	for (i=0; i < session->internals.rexts_size; i++) {
 		ctx.ext = &session->internals.rexts[i];
@@ -479,6 +480,28 @@ int _gnutls_hello_ext_pack(gnutls_session_t session, gnutls_buffer_st *packed)
 	_gnutls_write_uint32(n_exts, packed->data + total_exts_pos);
 
 	return 0;
+}
+
+void _gnutls_ext_set_full_client_hello(gnutls_session_t session,
+		handshake_buffer_st *recv_buf)
+{
+	gnutls_buffer_st *buf = &session->internals.full_client_hello;
+	_gnutls_buffer_clear(buf);
+	_gnutls_buffer_append_prefix(buf, 8, recv_buf->htype);
+	_gnutls_buffer_append_prefix(buf, 24, recv_buf->data.length);
+	_gnutls_buffer_append_data(buf, recv_buf->data.data, recv_buf->data.length);
+}
+
+int _gnutls_ext_get_full_client_hello(gnutls_session_t session,
+		gnutls_datum_t *datum)
+{
+	gnutls_buffer_st *buf = &session->internals.full_client_hello;
+
+	if (!datum)
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	_gnutls_set_datum(datum, buf->data, buf->length);
+	return buf->length;
 }
 
 static void

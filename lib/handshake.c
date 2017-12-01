@@ -83,6 +83,7 @@ handshake_hash_buffer_reset(gnutls_session_t session)
 	session->internals.handshake_hash_buffer_server_finished_len = 0;
 	session->internals.handshake_hash_buffer_prev_len = 0;
 	session->internals.handshake_hash_buffer.length = 0;
+	session->internals.full_client_hello.length = 0;
 	return;
 }
 
@@ -108,6 +109,7 @@ void _gnutls_handshake_hash_buffers_clear(gnutls_session_t session)
 {
 	handshake_hash_buffer_reset(session);
 	_gnutls_buffer_clear(&session->internals.handshake_hash_buffer);
+	_gnutls_buffer_clear(&session->internals.full_client_hello);
 }
 
 /* Replace handshake message buffer, with the special synthetic message
@@ -1624,6 +1626,8 @@ read_server_hello(gnutls_session_t session,
 	int len = datalen;
 	const version_entry_st *vers;
 	gnutls_ext_flags_t ext_parse_flag;
+	const uint8_t *psk = NULL;
+	size_t psk_size = 0;
 
 	if (datalen < GNUTLS_RANDOM_SIZE+2) {
 		gnutls_assert();
@@ -1761,6 +1765,30 @@ read_server_hello(gnutls_session_t session,
 				     &data[pos], len);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
+
+	if (vers->tls13_sem) {
+		/* TLS 1.3 Early Secret */
+		if (session->internals.tls13_psk_selected) {
+			psk = session->internals.tls13_psk.data;
+			psk_size = session->internals.tls13_psk.size;
+		}
+
+		ret = _tls13_init_secret(session, psk, psk_size);
+		if (ret < 0) {
+			gnutls_assert();
+			goto cleanup;
+		}
+
+		ret = _tls13_derive_secret(session, DERIVED_LABEL, sizeof(DERIVED_LABEL)-1,
+					   NULL, 0, session->key.temp_secret);
+		if (ret < 0)
+			gnutls_assert();
+	}
+
+cleanup:
+
+	if (session->internals.tls13_psk_selected)
+		_gnutls_free_datum(&session->internals.tls13_psk);
 
 	return ret;
 }
@@ -1987,6 +2015,8 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 	char tmpbuf[2 * GNUTLS_MAX_SESSION_ID_SIZE + 1];
 	const version_entry_st *vers;
 	gnutls_ext_flags_t ext_parse_flag;
+	const uint8_t *psk = NULL;
+	size_t psk_size = 0;
 
 	_gnutls_buffer_init(&buf);
 
@@ -1997,9 +2027,16 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 
 		if (vers->tls13_sem) {
 			/* TLS 1.3 Early Secret */
-			ret = _tls13_init_secret(session, NULL, 0);
-			if (ret < 0)
-				return gnutls_assert_val(ret);
+			if (session->internals.tls13_psk_selected) {
+				psk = session->internals.tls13_psk.data;
+				psk_size = session->internals.tls13_psk.size;
+			}
+
+			ret = _tls13_init_secret(session, psk, psk_size);
+			if (ret < 0) {
+				gnutls_assert();
+				goto fail;
+			}
 
 			ext_parse_flag = GNUTLS_EXT_FLAG_TLS13_SERVER_HELLO;
 		} else {
@@ -2007,8 +2044,10 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 		}
 
 		ret = _gnutls_buffer_init_handshake_mbuffer(&buf);
-		if (ret < 0)
-			return gnutls_assert_val(ret);
+		if (ret < 0) {
+			gnutls_assert();
+			goto fail;
+		}
 
 		ret = _gnutls_buffer_append_data(&buf, &vers->major, 1);
 		if (ret < 0) {
@@ -2091,7 +2130,9 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 	    _gnutls_send_handshake(session, bufel,
 				   GNUTLS_HANDSHAKE_SERVER_HELLO);
 
-      fail:
+fail:
+	if (session->internals.tls13_psk_selected)
+		_gnutls_free_temp_key_datum(&session->internals.tls13_psk);
 	_gnutls_buffer_clear(&buf);
 	return ret;
 }

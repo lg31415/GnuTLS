@@ -1173,6 +1173,17 @@ typedef struct {
 	 * they are reset to zero prior to handshake start by gnutls_handshake. */
 	unsigned hsk_flags;
 	time_t last_key_update;
+	unsigned tls13_psk_selected; 
+	gnutls_datum_t tls13_psk; 
+	/* Read-only pointer to the full ClientHello message */ 
+	gnutls_buffer_st full_client_hello; 
+	/* The offset at which extensions start in the ClientHello buffer */ 
+	int extensions_offset; 
+
+	unsigned crt_requested; /* 1 if client auth was requested (i.e., client cert).
+	 * In case of a server this holds 1 if we should wait
+	 * for a client certificate verify
+	 */
 
 	gnutls_buffer_st hb_local_data;
 	gnutls_buffer_st hb_remote_data;

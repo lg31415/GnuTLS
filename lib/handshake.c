@@ -2132,7 +2132,7 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 
 fail:
 	if (session->internals.tls13_psk_selected)
-		_gnutls_free_temp_key_datum(&session->internals.tls13_psk);
+		_gnutls_free_datum(&session->internals.tls13_psk);
 	_gnutls_buffer_clear(&buf);
 	return ret;
 }

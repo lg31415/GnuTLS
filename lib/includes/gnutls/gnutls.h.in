@@ -88,6 +88,9 @@ extern "C" {
 #define GNUTLS_SKIP_GLOBAL_INIT int _gnutls_global_init_skip(void); \
     int _gnutls_global_init_skip(void) {return 1;}
 
+#define GNUTLS_NO_FIPS140_MODE unsigned _gnutls_fips_mode_enabled(void); \
+    unsigned _gnutls_fips_mode_enabled(void) {return 0;}
+
 /**
  * gnutls_cipher_algorithm_t:
  * @GNUTLS_CIPHER_UNKNOWN: Value to identify an unknown/unsupported algorithm.

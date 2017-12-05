@@ -1196,6 +1196,7 @@ GNUTLS_3_6_2
  global:
 	gnutls_srp_8192_group_generator;
 	gnutls_srp_8192_group_prime;
+	_gnutls_fips_mode_enabled;
  local:
 	*;
 } GNUTLS_3_6_0;

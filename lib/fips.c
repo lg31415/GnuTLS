@@ -46,6 +46,10 @@ static int _skip_integrity_checks = 0;
  * 1 - FIPS mode enabled and enforced
  * 2 - FIPS in testing mode
  */
+#ifndef _WIN32
+unsigned __attribute__((weak)) _gnutls_fips_mode_enabled(void);
+#endif
+
 unsigned _gnutls_fips_mode_enabled(void)
 {
 unsigned f1p = 0, f2p;

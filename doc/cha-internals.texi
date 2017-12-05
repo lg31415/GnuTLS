@@ -699,3 +699,14 @@ mode, when set to '0' will force a disable of it.
 
 On runtime an application can verify whether the library is in FIPS140-2
 using the @funcref{gnutls_fips140_mode_enabled} function.
+
+Applications can explicitly opt-out from FIPS140-2 mode globally by using
+the macro @code{GNUTLS_NO_FIPS140_MODE} once in their code.
+
+@example
+#include <gnutls/gnutls.h>
+
+GNUTLS_NO_FIPS140_MODE
+
+int main()
+@end example

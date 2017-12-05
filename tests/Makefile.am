@@ -114,7 +114,7 @@ ctests = mini-record-2 simple gc set_pkcs12_cred cert certuniqueid tls-neg-ext-k
 	 mini-dtls-srtp rsa-encrypt-decrypt mini-loss-time gnutls-strcodes \
 	 mini-record mini-dtls-record mini-handshake-timeout mini-record-range \
 	 mini-cert-status rsa-psk global-init sec-params sign-verify-data \
-	 fips-test mini-global-load name-constraints x509-extensions \
+	 fips-test fips-disable-test mini-global-load name-constraints x509-extensions \
 	 long-session-id mini-x509-callbacks-intr mini-dtls-lowmtu \
 	 crlverify mini-dtls-discard init_fds mini-record-failure memset \
 	 tls-rehandshake-cert-2 custom-urls set_x509_key_mem set_x509_key_file \

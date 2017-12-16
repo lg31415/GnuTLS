@@ -32,24 +32,37 @@
 /* HKDF-Extract(0,0) or HKDF-Extract(0, PSK) */
 int _tls13_init_secret(gnutls_session_t session, const uint8_t *psk, size_t psk_size)
 {
+	session->key.proto.tls13.temp_secret_size = session->security_parameters.prf->output_size;
+
+	return _tls13_init_secret2(session->security_parameters.prf,
+			psk, psk_size,
+			session->key.proto.tls13.temp_secret);
+}
+
+int _tls13_init_secret2(const mac_entry_st *prf,
+		const uint8_t *psk, size_t psk_size,
+		void *out)
+{
 	char buf[128];
 
-	session->key.proto.tls13.temp_secret_size = session->security_parameters.prf->output_size;
+	if (unlikely(prf == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 	/* when no PSK, use the zero-value */
 	if (psk == NULL) {
-		psk_size = session->key.proto.tls13.temp_secret_size;
+		psk_size = prf->output_size;
+
 		if (unlikely(psk_size >= sizeof(buf)))
 			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 		memset(buf, 0, psk_size);
-		psk = (uint8_t*)buf;
+		psk = (uint8_t*) buf;
 	}
 
-	return gnutls_hmac_fast(session->security_parameters.prf->id,
-				"", 0,
-				psk, psk_size,
-				session->key.proto.tls13.temp_secret);
+	return gnutls_hmac_fast(prf->id,
+			"", 0,
+			psk, psk_size,
+			out);
 }
 
 /* HKDF-Extract(Prev-Secret, key) */

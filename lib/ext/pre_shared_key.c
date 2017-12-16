@@ -42,11 +42,7 @@ compute_binder_key(const mac_entry_st *prf,
 	uint8_t tmp_key[MAX_HASH_SIZE];
 
 	/* Compute HKDF-Extract(0, psk) */
-	/* TODO try to use the existing functions here */
-	ret = gnutls_hmac_fast(prf->id,
-			"", 0,
-			key, keylen,
-			tmp_key);
+	ret = _tls13_init_secret2(prf, key, keylen, tmp_key);
 	if (ret < 0)
 		return ret;
 

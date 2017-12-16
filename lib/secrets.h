@@ -27,6 +27,10 @@
 int _tls13_init_secret(gnutls_session_t session, const uint8_t *psk, size_t psk_size);
 int _tls13_update_secret(gnutls_session_t session, const uint8_t *key, size_t key_size);
 
+int _tls13_init_secret2(const mac_entry_st *prf,
+		const uint8_t *psk, size_t psk_size,
+		void *out);
+
 int _tls13_derive_secret(gnutls_session_t session,
 			 const char *label, unsigned label_size,
 			 const uint8_t *msg, size_t msg_size,

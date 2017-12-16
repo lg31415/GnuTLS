@@ -90,22 +90,26 @@ int _gnutls13_handshake_client(gnutls_session_t session)
 		IMED_RET("recv encrypted extensions", ret, 0);
 		/* fall through */
 	case STATE102:
-		ret = _gnutls13_recv_certificate_request(session);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_recv_certificate_request(session);
 		STATE = STATE102;
 		IMED_RET("recv certificate request", ret, 0);
 		/* fall through */
 	case STATE103:
-		ret = _gnutls13_recv_certificate(session);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_recv_certificate(session);
 		STATE = STATE103;
 		IMED_RET("recv certificate", ret, 0);
 		/* fall through */
 	case STATE104:
-		ret = _gnutls13_recv_certificate_verify(session);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_recv_certificate_verify(session);
 		STATE = STATE104;
 		IMED_RET("recv server certificate verify", ret, 0);
 		/* fall through */
 	case STATE105:
-		ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
 		STATE = STATE105;
 		if (ret < 0)
 			return gnutls_assert_val(ret);
@@ -116,12 +120,14 @@ int _gnutls13_handshake_client(gnutls_session_t session)
 		IMED_RET("recv finished", ret, 0);
 		/* fall through */
 	case STATE107:
-		ret = _gnutls13_send_certificate(session, AGAIN(STATE107));
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_send_certificate(session, AGAIN(STATE107));
 		STATE = STATE107;
 		IMED_RET("send certificate", ret, 0);
 		/* fall through */
 	case STATE108:
-		ret = _gnutls13_send_certificate_verify(session, AGAIN(STATE108));
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_send_certificate_verify(session, AGAIN(STATE108));
 		STATE = STATE108;
 		IMED_RET("send certificate verify", ret, 0);
 		/* fall through */
@@ -267,17 +273,20 @@ int _gnutls13_handshake_server(gnutls_session_t session)
 		IMED_RET("send encrypted extensions", ret, 0);
 		/* fall through */
 	case STATE102:
-		ret = _gnutls13_send_certificate_request(session, AGAIN(STATE102));
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_send_certificate_request(session, AGAIN(STATE102));
 		STATE = STATE102;
 		IMED_RET("send certificate request", ret, 0);
 		/* fall through */
 	case STATE103:
-		ret = _gnutls13_send_certificate(session, AGAIN(STATE103));
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_send_certificate(session, AGAIN(STATE103));
 		STATE = STATE103;
 		IMED_RET("send certificate", ret, 0);
 		/* fall through */
 	case STATE104:
-		ret = _gnutls13_send_certificate_verify(session, AGAIN(STATE104));
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_send_certificate_verify(session, AGAIN(STATE104));
 		STATE = STATE104;
 		IMED_RET("send certificate verify", ret, 0);
 		/* fall through */
@@ -287,17 +296,20 @@ int _gnutls13_handshake_server(gnutls_session_t session)
 		IMED_RET("send finished", ret, 0);
 		/* fall through */
 	case STATE106:
-		ret = _gnutls13_recv_certificate(session);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_recv_certificate(session);
 		STATE = STATE106;
 		IMED_RET("recv certificate", ret, 0);
 		/* fall through */
 	case STATE107:
-		ret = _gnutls13_recv_certificate_verify(session);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls13_recv_certificate_verify(session);
 		STATE = STATE107;
 		IMED_RET("recv certificate verify", ret, 0);
 		/* fall through */
 	case STATE108:
-		ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
+		if (!(session->internals.hsk_flags & HSK_PSK_SELECTED)) /* unless a PSK is being used */
+			ret = _gnutls_run_verify_callback(session, GNUTLS_CLIENT);
 		STATE = STATE108;
 		if (ret < 0)
 			return gnutls_assert_val(ret);

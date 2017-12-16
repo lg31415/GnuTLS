@@ -40,10 +40,6 @@ compute_binder_key(const mac_entry_st *prf,
 	char label[] = "ext_binder";
 	size_t label_len = strlen(label);
 	uint8_t tmp_key[MAX_HASH_SIZE];
-	size_t tmp_key_len = _gnutls_mac_get_algo_len(prf);
-
-	if (tmp_key_len == 0)
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 	/* Compute HKDF-Extract(0, psk) */
 	/* TODO try to use the existing functions here */
@@ -58,7 +54,7 @@ compute_binder_key(const mac_entry_st *prf,
 	ret = _tls13_derive_secret2(prf,
 			label, label_len,
 			NULL, 0,
-			tmp_key, tmp_key_len,
+			tmp_key,
 			out);
 	if (ret < 0)
 		return ret;

@@ -1780,7 +1780,8 @@ read_server_hello(gnutls_session_t session,
 		}
 
 		ret = _tls13_derive_secret(session, DERIVED_LABEL, sizeof(DERIVED_LABEL)-1,
-					   NULL, 0, session->key.temp_secret);
+					   NULL, 0, session->key.proto.tls13.temp_secret,
+					   session->key.proto.tls13.temp_secret);
 		if (ret < 0)
 			gnutls_assert();
 	}

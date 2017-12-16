@@ -83,7 +83,7 @@ int _tls13_derive_secret2(const mac_entry_st *prf,
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
-	return _tls13_expand_secret2(prf, label, label_size, digest, digest_size, secret, out_size, out);
+	return _tls13_expand_secret2(prf, label, label_size, digest, digest_size, secret, digest_size, out);
 }
 
 /* Derive-Secret(Secret, Label, Messages) */
@@ -96,9 +96,8 @@ int _tls13_derive_secret(gnutls_session_t session,
 	if (unlikely(session->security_parameters.prf == NULL))
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
-	return _tls13_derive_secret2(session->security_parameters.prf, label, label_size, msg, msg_size,
-				         session->key.temp_secret,
-				         session->key.temp_secret_size,
+	return _tls13_derive_secret2(session->security_parameters.prf, label, label_size, tbh, tbh_size,
+				         secret,
 				         out);
 }
 

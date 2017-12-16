@@ -186,6 +186,8 @@ client_send_params(gnutls_session_t session,
 	if (prf == NULL || hash_size == 0 || hash_size > 255)
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
+	memset(&username, 0, sizeof(gnutls_datum_t));
+
 	ret = get_credentials(session, cred, &username, &key);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
@@ -462,7 +464,7 @@ static int server_recv_params(gnutls_session_t session,
 			GNUTLS_EXTENSION_PRE_SHARED_KEY,
 			(gnutls_ext_priv_data_t) priv);
 
-	session->internals.tls13_psk_selected = 1;
+	session->internals.hsk_flags |= HSK_PSK_SELECTED;
 	/* Reference the selected pre-shared key */
 	session->internals.tls13_psk.data = key.data;
 	session->internals.tls13_psk.size = key.size;
@@ -476,7 +478,7 @@ static int client_recv_params(gnutls_session_t session,
 {
 	uint16_t selected_identity = _gnutls_read_uint16(data);
 	if (selected_identity == 0)
-		session->internals.tls13_psk_selected = 1;
+		session->internals.hsk_flags |= HSK_PSK_SELECTED;
 	return 0;
 }
 

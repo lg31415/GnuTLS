@@ -1173,12 +1173,12 @@ typedef struct {
 #define HSK_USED_FFDHE (1<<10) /* whether ffdhe was actually negotiated and used */
 #define HSK_PSK_KE_MODES_SENT (1<<11)
 #define HSK_PSK_KE_MODES_RECEIVED (1<<12)
+#define HSK_PSK_SELECTED (1<<13)
 	/* The hsk_flags are for use within the ongoing handshake;
 	 * they are reset to zero prior to handshake start by gnutls_handshake. */
 	unsigned hsk_flags;
 	time_t last_key_update;
-	unsigned tls13_psk_selected; 
-	gnutls_datum_t tls13_psk; 
+	gnutls_datum_t tls13_psk;
 	/* Read-only pointer to the full ClientHello message */ 
 	gnutls_buffer_st full_client_hello; 
 	/* The offset at which extensions start in the ClientHello buffer */ 

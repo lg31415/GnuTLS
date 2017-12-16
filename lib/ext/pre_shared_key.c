@@ -326,7 +326,7 @@ server_read_identities(const unsigned char **data_p, long *len_p,
 		 */
 		if (ob_ticket_age == 0 &&
 				username->size == identity_len &&
-				memcmp(username->data, identity, identity_len) == 0) {
+				safe_memcmp(username->data, identity, identity_len) == 0) {
 			psk_found = 1;
 			break;
 		}
@@ -351,7 +351,7 @@ server_read_binders(const unsigned char **data_p, long *len_p,
 	while (len > 0) {
 		binder_len = *data;
 		if (binder_len == 0)
-			return 0;
+			return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 
 		DECR_LEN(len, 1);
 		data++;
@@ -380,7 +380,8 @@ server_read_binders(const unsigned char **data_p, long *len_p,
 
 	*len_p = len;
 	*data_p = data;
-	return (binder_found ? binder_len : 0);
+
+	return (binder_found ? binder_len : gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS));
 }
 
 static int server_recv_params(gnutls_session_t session,
@@ -430,10 +431,10 @@ static int server_recv_params(gnutls_session_t session,
 
 	ret = server_read_binders(&data, &len,
 			psk_index, &binder_recvd);
-	if (ret == 0)
-		return 0;
 	if (ret < 0)
 		return gnutls_assert_val(ret);
+	if (binder_recvd.size == 0)
+		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 
 	priv = gnutls_malloc(sizeof(psk_ext_st));
 	if (!priv) {
@@ -454,9 +455,9 @@ static int server_recv_params(gnutls_session_t session,
 			&key, &full_client_hello,
 			binder_value);
 	if (_gnutls_mac_get_algo_len(prf) != binder_recvd.size ||
-			memcmp(binder_value, binder_recvd.data, binder_recvd.size)) {
+			safe_memcmp(binder_value, binder_recvd.data, binder_recvd.size)) {
 		_gnutls_free_datum(&binder_recvd);
-		return 0;
+		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 	}
 
 	priv->selected_identity = 0;

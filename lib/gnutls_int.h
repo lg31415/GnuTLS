@@ -257,6 +257,7 @@ typedef enum handshake_state_t { STATE0 = 0, STATE1, STATE2,
 	STATE90=90, STATE91, STATE92, STATE93,
 	STATE100=100, STATE101, STATE102, STATE103, STATE104,
 	STATE105, STATE106, STATE107, STATE108, STATE109, STATE110,
+	STATE111, /* new session ticket */
 	STATE150 /* key update */
 } handshake_state_t;
 
@@ -469,6 +470,7 @@ struct gnutls_key_st {
 			uint8_t hs_ckey[MAX_HASH_SIZE]; /* client_handshake_traffic_secret */
 			uint8_t hs_skey[MAX_HASH_SIZE]; /* server_handshake_traffic_secret */
 			uint8_t ap_expkey[MAX_HASH_SIZE]; /* exporter_master_secret */
+			uint8_t ap_rms[MAX_HASH_SIZE]; /* resumption_master_secret */
 		} tls13; /* tls1.3 */
 
 		/* Folow the SSL3.0 and TLS1.2 key exchanges */

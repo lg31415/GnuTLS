@@ -29,36 +29,39 @@
 
 static int parse_nst_extension(void *ctx, uint16_t tls_id, const uint8_t *data, int data_size);
 
-int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf)
+int _gnutls13_send_session_ticket(gnutls_session_t session)
+{
+	/* TODO implement this */
+	return GNUTLS_E_INTERNAL_ERROR;
+}
+
+int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf, struct tls13_nst_st *ticket)
 {
 	int ret;
-	size_t val;
-	gnutls_datum_t nonce;
-	gnutls_datum_t ticket;
 
 	_gnutls_handshake_log("HSK[%p]: parsing session ticket message\n", session);
 
 	/* ticket_lifetime */
-	ret = _gnutls_buffer_pop_prefix32(buf, &val, 0);
+	ret = _gnutls_buffer_pop_prefix32(buf, &ticket->ticket_lifetime, 0);
 	if (ret < 0) {
 		gnutls_assert();
 		goto cleanup;
 	}
 
 	/* ticket_age_add */
-	ret = _gnutls_buffer_pop_prefix32(buf, &val, 0);
+	ret = _gnutls_buffer_pop_prefix32(buf, &ticket->ticket_age_add, 0);
 	if (ret < 0) {
 		gnutls_assert();
 		goto cleanup;
 	}
 
-	ret = _gnutls_buffer_pop_datum_prefix8(buf, &nonce);
+	ret = _gnutls_buffer_pop_datum_prefix8(buf, &ticket->ticket_nonce);
 	if (ret < 0) {
 		gnutls_assert();
 		goto cleanup;
 	}
 
-	ret = _gnutls_buffer_pop_datum_prefix16(buf, &ticket);
+	ret = _gnutls_buffer_pop_datum_prefix16(buf, &ticket->ticket);
 	if (ret < 0) {
 		gnutls_assert();
 		goto cleanup;

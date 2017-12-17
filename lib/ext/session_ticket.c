@@ -89,14 +89,6 @@ typedef struct {
 	uint8_t key[SESSION_KEY_SIZE];
 } session_ticket_ext_st;
 
-struct ticket_st {
-	uint8_t key_name[KEY_NAME_SIZE];
-	uint8_t IV[IV_SIZE];
-	uint8_t *encrypted_state;
-	uint16_t encrypted_state_len;
-	uint8_t mac[MAC_SIZE];
-};
-
 static
 int digest_ticket(const gnutls_datum_t * key, struct ticket_st *ticket,
 	      uint8_t * digest)
@@ -124,7 +116,7 @@ int digest_ticket(const gnutls_datum_t * key, struct ticket_st *ticket,
 }
 
 static int
-decrypt_ticket(gnutls_session_t session, session_ticket_ext_st * priv,
+decrypt_ticket(gnutls_session_t session, session_ticket_ext_st *priv,
 	       struct ticket_st *ticket)
 {
 	cipher_hd_st cipher_hd;
@@ -286,6 +278,48 @@ cleanup:
 	_gnutls_free_datum(&encrypted_state);
 
 	return ret;
+}
+
+int _gnutls_decrypt_session_ticket(gnutls_session_t session, struct ticket_st *ticket)
+{
+	int ret;
+	gnutls_ext_priv_data_t epriv;
+	session_ticket_ext_st *priv = NULL;
+
+	ret = _gnutls_hello_ext_get_priv(session,
+					 GNUTLS_EXTENSION_SESSION_TICKET,
+					 &epriv);
+	if (ret < 0)
+		return 0;
+	priv = epriv;
+
+	ret = decrypt_ticket(session, priv, ticket);
+	if (ret < 0)
+		return 0;
+
+	return 0;
+}
+
+int _gnutls_encrypt_session_ticket(gnutls_session_t session, struct ticket_st *ticket)
+{
+	int ret;
+	gnutls_ext_priv_data_t epriv;
+	session_ticket_ext_st *priv = NULL;
+
+	ret = _gnutls_hello_ext_get_priv(session,
+			GNUTLS_EXTENSION_SESSION_TICKET,
+			&epriv);
+	if (ret < 0)
+		return 0;
+
+	/* Generate a ticket and encrypt it with priv->key */
+	ret = encrypt_ticket(session, priv, ticket);
+	if (ret < 0) {
+		gnutls_assert();
+		return ret;
+	}
+
+	return 0;
 }
 
 static int

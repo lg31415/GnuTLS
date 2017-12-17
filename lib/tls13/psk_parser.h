@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2017 Red Hat, Inc.
+ * Copyright (C) 2017 Free Software Foundation, Inc.
  *
- * Author: Nikos Mavrogiannopoulos
+ * Author: Ander Juaristi
  *
  * This file is part of GnuTLS.
  *
@@ -19,18 +19,31 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>
  *
  */
-#ifndef SESSION_TICKET_H
-#define SESSION_TICKET_H
 
-struct tls13_nst_st {
-	uint32_t ticket_lifetime;
-	uint32_t ticket_age_add;
-	gnutls_datum_t ticket_nonce;
-	gnutls_datum_t ticket;
-	gnutls_mac_algorithm_t kdf_id;
+#ifndef PSK_PARSER_H
+#define PSK_PARSER_H
+#include "gnutls_int.h"
+
+struct psk_parser_st {
+	unsigned char *data;
+	ssize_t len;
+	uint16_t identities_len;
+	uint16_t identities_read;
+	int next_index;
 };
 
-int _gnutls13_send_session_ticket(gnutls_session_t session);
-int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf, struct tls13_nst_st *ticket);
+struct psk_st {
+	gnutls_datum_t identity;
+	uint16_t ob_ticket_age;
+	int selected_index;
+};
+
+void _gnutls13_psk_parser_init(struct psk_parser_st *p,
+			      const unsigned char *data, size_t len,
+			      uint16_t ttl_identities_len);
+void _gnutls13_psk_parser_deinit(struct psk_parser_st *p,
+				 const unsigned char **data, size_t *len);
+int _gnutls13_psk_parser_next(struct psk_parser_st *p, struct psk_st *psk);
 
 #endif
+

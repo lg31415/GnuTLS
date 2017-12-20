@@ -339,8 +339,9 @@ int _gnutls13_handshake_server(gnutls_session_t session)
 		IMED_RET("generate app keys", ret, 0);
 		/* fall through */
 	case STATE111:
-		/* TODO send TLS 1.3 NewSessionTicket message here */
+		ret = _gnutls13_send_session_ticket(session);
 		STATE = STATE0;
+		IMED_RET("send new session ticket", ret, 0);
 		break;
 	default:
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);

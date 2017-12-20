@@ -31,11 +31,55 @@ static int parse_nst_extension(void *ctx, uint16_t tls_id, const uint8_t *data, 
 
 int _gnutls13_send_session_ticket(gnutls_session_t session)
 {
-	/* TODO implement this */
-	return GNUTLS_E_INTERNAL_ERROR;
+	int ret;
+	gnutls_buffer_st buf;
+	mbuffer_st *bufel = NULL;
+	struct tls13_nst_st ticket;
+
+	/* Client does not send a NewSessionTicket */
+	if (unlikely(session->security_parameters.entity == GNUTLS_CLIENT))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	ret = _gnutls13_session_ticket_get(session, &ticket);
+	if (ret > 0) {
+		if ((ret = _gnutls_buffer_init_handshake_mbuffer(&buf)) < 0) {
+			gnutls_assert();
+			goto error;
+		}
+
+		if ((ret = _gnutls_buffer_append_prefix(buf, 32, ticket.ticket_lifetime)) < 0) {
+			gnutls_assert();
+			goto error;
+		}
+		if ((ret = _gnutls_buffer_append_prefix(buf, 32, ticket.ticket_age_add)) < 0) {
+			gnutls_assert();
+			goto error;
+		}
+		if ((ret = _gnutls_buffer_append_data_prefix(buf, 8,
+				ticket.ticket_nonce.data, ticket.ticket_nonce.size)) < 0) {
+			gnutls_assert();
+			goto error;
+		}
+		if ((ret = _gnutls_buffer_append_data_prefix(buf, 16,
+				ticket.ticket.data, ticket.ticket.size)) < 0) {
+			gnutls_assert();
+			goto error;
+		}
+
+		bufel = _gnutls_buffer_to_mbuffer(buf);
+		return _gnutls_send_handshake(session, bufel,
+				GNUTLS_HANDSHAKE_NEW_SESSION_TICKET);
+	}
+
+	return 0;
+
+error:
+	_gnutls_buffer_clear(&buf);
+	return ret;
 }
 
-int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf, struct tls13_nst_st *ticket)
+int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf,
+		struct tls13_nst_st *ticket)
 {
 	int ret;
 

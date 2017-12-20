@@ -219,6 +219,7 @@ client_send_params(gnutls_session_t session,
 			*ticket_prf = NULL;
 	unsigned hash_size = _gnutls_mac_get_algo_len(prf);
 	struct tls13_nst_st ticket;
+	uint32_t ob_ticket_age = 0;
 
 	if (prf == NULL || hash_size == 0 || hash_size > 255)
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
@@ -250,6 +251,9 @@ client_send_params(gnutls_session_t session,
 				gnutls_assert();
 				goto cleanup;
 			}
+
+			/* Calculate obfuscated ticket age, in milliseconds, mod 2^32 */
+			ob_ticket_age = (ticket.ticket_lifetime * 1000 + ticket.ticket_age_add) % 4294967296;
 		}
 	}
 
@@ -277,8 +281,8 @@ client_send_params(gnutls_session_t session,
 		gnutls_assert_val(ret);
 		goto cleanup;
 	}
-	/* Now append the ticket age, which is always zero for out-of-band PSKs */
-	if ((ret = _gnutls_buffer_append_prefix(extdata, 32, 0)) < 0) {
+	/* Obfuscated ticket age */
+	if ((ret = _gnutls_buffer_append_prefix(extdata, 32, ob_ticket_age)) < 0) {
 		gnutls_assert_val(ret);
 		goto cleanup;
 	}

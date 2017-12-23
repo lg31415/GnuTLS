@@ -508,6 +508,15 @@ struct gnutls_key_st {
 	/* TLS pre-master key; applies to 1.2 and 1.3 */
 	gnutls_datum_t key;
 
+#ifdef ENABLE_SESSION_TICKETS
+	/* The key to encrypt and decrypt session tickets */
+#define KEY_NAME_SIZE 16
+#define CIPHER_KEY_SIZE 32
+#define MAC_SECRET_SIZE 16
+#define SESSION_KEY_SIZE (KEY_NAME_SIZE+CIPHER_KEY_SIZE+MAC_SECRET_SIZE)
+	uint8_t session_ticket_key[SESSION_KEY_SIZE];
+#endif
+
 	/* this is used to hold the peers authentication data 
 	 */
 	/* auth_info_t structures SHOULD NOT contain malloced 
@@ -1280,6 +1289,9 @@ typedef struct {
 
 	/* the ciphersuite received in HRR */
 	uint8_t hrr_cs[2];
+
+	int session_ticket_enable;
+	int session_ticket_renew;
 
 	/* If you add anything here, check _gnutls_handshake_internal_state_clear().
 	 */

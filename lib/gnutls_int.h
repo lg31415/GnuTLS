@@ -514,6 +514,9 @@ struct gnutls_key_st {
 #define CIPHER_KEY_SIZE 32
 #define MAC_SECRET_SIZE 16
 #define SESSION_KEY_SIZE (KEY_NAME_SIZE+CIPHER_KEY_SIZE+MAC_SECRET_SIZE)
+#define NAME_POS (0)
+#define KEY_POS (KEY_NAME_SIZE)
+#define MAC_SECRET_POS (KEY_NAME_SIZE+CIPHER_KEY_SIZE)
 	uint8_t session_ticket_key[SESSION_KEY_SIZE];
 #endif
 

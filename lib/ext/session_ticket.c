@@ -71,10 +71,6 @@ const hello_ext_entry_st ext_mod_session_ticket = {
 	.cannot_be_overriden = 1
 };
 
-#define NAME_POS (0)
-#define KEY_POS (KEY_NAME_SIZE)
-#define MAC_SECRET_POS (KEY_NAME_SIZE+CIPHER_KEY_SIZE)
-
 typedef struct {
 	uint8_t *session_ticket;
 	int session_ticket_len;

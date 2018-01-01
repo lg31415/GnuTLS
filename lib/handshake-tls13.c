@@ -339,7 +339,7 @@ int _gnutls13_handshake_server(gnutls_session_t session)
 		IMED_RET("generate app keys", ret, 0);
 		/* fall through */
 	case STATE111:
-		ret = _gnutls13_send_session_ticket(session);
+		ret = _gnutls13_send_session_ticket(session, AGAIN(STATE111));
 		STATE = STATE0;
 		IMED_RET("send new session ticket", ret, 0);
 		break;

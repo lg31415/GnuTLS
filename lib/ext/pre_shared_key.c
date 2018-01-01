@@ -453,8 +453,7 @@ static int server_recv_params(gnutls_session_t session,
 		 * First check if this is an out-of-band PSK.
 		 * If it's not, try to decrypt it, as it might be a session ticket.
 		 */
-		if (psk.ob_ticket_age == 0 &&
-		    username.size == psk.identity.size &&
+		if (username.size == psk.identity.size &&
 		    safe_memcmp(username.data, psk.identity.data, psk.identity.size) == 0) {
 			psk_index = psk.selected_index;
 			break;
@@ -494,16 +493,10 @@ static int server_recv_params(gnutls_session_t session,
 	if (binder_recvd.size == 0)
 		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 
-	if (_gnutls_hello_ext_get_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			&epriv) == 0) {
-		priv = epriv;
-	} else {
-		priv = gnutls_malloc(sizeof(psk_ext_st));
-		if (!priv) {
-			ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-			goto cleanup;
-		}
+	priv = gnutls_malloc(sizeof(psk_ext_st));
+	if (!priv) {
+		ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		goto cleanup;
 	}
 
 	/* Get full ClientHello */

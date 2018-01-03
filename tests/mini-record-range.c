@@ -324,6 +324,7 @@ static void start(const char *prio)
 }
 
 #define AES_CBC "NONE:+VERS-TLS1.2:+AES-128-CBC:+MAC-ALL:+SIGN-ALL:+ANON-ECDH:+CURVE-ALL"
+#define AES_GCM "NONE:+VERS-TLS1.3:+AES-256-GCM:+AEAD:+SIGN-ALL:+GROUP-ALL"
 
 static void ch_handler(int sig)
 {
@@ -338,6 +339,7 @@ void doit(void)
 	signal(SIGCHLD, ch_handler);
 
 	start(AES_CBC);
+	start(AES_GCM);
 }
 
 #endif				/* _WIN32 */

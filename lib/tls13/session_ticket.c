@@ -330,9 +330,10 @@ int _gnutls13_send_session_ticket(gnutls_session_t session, unsigned again)
 
 		ticket_len = sizeof(uint32_t) +		/* ticket_lifetime */
 				sizeof(uint32_t) +	/* ticket_age_add */
-				ticket.ticket_nonce.size +
-				ticket.ticket.size;
-		bufel = _gnutls_handshake_alloc(session, ticket_len + 2);
+				ticket.ticket_nonce.size + 1 +
+				ticket.ticket.size + 2 +
+				2;			/* extensions length */
+		bufel = _gnutls_handshake_alloc(session, ticket_len);
 		if (bufel == NULL) {
 			ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
 			goto cleanup;
@@ -341,23 +342,28 @@ int _gnutls13_send_session_ticket(gnutls_session_t session, unsigned again)
 		data = _mbuffer_get_udata_ptr(bufel);
 		p = data;
 
-		_gnutls_write_uint16(ticket_len, p);
-		p += 2;
+		/* append ticket_lifetime */
 		_gnutls_write_uint32(ticket.ticket_lifetime, p);
 		p += 4;
+		/* append ticket_age_add */
 		_gnutls_write_uint32(ticket.ticket_age_add, p);
 		p += 4;
-		_gnutls_write_uint16(ticket.ticket_nonce.size, p);
-		p += 2;
+		/* append ticket_nonce */
+		*p = (uint8_t) ticket.ticket_nonce.size;
+		p++;
 		memcpy(p, ticket.ticket_nonce.data, ticket.ticket_nonce.size);
 		p += ticket.ticket_nonce.size;
+		/* append ticket */
 		_gnutls_write_uint16(ticket.ticket.size, p);
 		p += 2;
 		memcpy(p, ticket.ticket.data, ticket.ticket.size);
 		p += ticket.ticket.size;
 
+		/* No extensions */
+		_gnutls_write_uint16(0, p);
+		p += 2;
+
 		data_size = p - data;
-		session->internals.ticket_sent = 1;
 	}
 
 	return _gnutls_send_handshake(session, data_size ? bufel : NULL,

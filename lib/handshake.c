@@ -54,6 +54,7 @@
 #include <random.h>
 #include <dtls.h>
 #include "secrets.h"
+#include "tls13/session_ticket.h"
 
 #define TRUE 1
 #define FALSE 0
@@ -2472,6 +2473,22 @@ int gnutls_handshake(gnutls_session_t session)
 			STATE = STATE0;
 
 		return ret;
+	}
+
+	/*
+	 * Handshake is complete, and application traffic keys are available.
+	 * Now we send a TLS 1.3 NewSessionTicket if requested.
+	 */
+	if (session->security_parameters.entity == GNUTLS_SERVER &&
+			get_version(session)->tls13_sem) {
+		ret = _gnutls13_send_session_ticket(session, AGAIN(STATE111));
+		STATE = STATE111;
+
+		if (ret < 0)
+			return gnutls_assert_val(ret);
+
+		session->internals.ticket_sent = 1;
+		STATE = STATE0;
 	}
 
 	/* clear handshake buffer */

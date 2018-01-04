@@ -54,7 +54,6 @@
 #include "tls13/certificate.h"
 #include "tls13/finished.h"
 #include "tls13/key_update.h"
-#include "tls13/session_ticket.h"
 #include "ext/pre_shared_key.h"
 
 static int generate_hs_traffic_keys(gnutls_session_t session);
@@ -337,11 +336,8 @@ int _gnutls13_handshake_server(gnutls_session_t session)
 		    generate_ap_traffic_keys(session);
 		STATE = STATE110;
 		IMED_RET("generate app keys", ret, 0);
-		/* fall through */
-	case STATE111:
-		ret = _gnutls13_send_session_ticket(session, AGAIN(STATE111));
+
 		STATE = STATE0;
-		IMED_RET("send new session ticket", ret, 0);
 		break;
 	default:
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
@@ -416,6 +412,7 @@ _gnutls13_recv_async_handshake(gnutls_session_t session, gnutls_buffer_st *buf)
 			if (session->security_parameters.entity != GNUTLS_CLIENT)
 				return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET);
 
+			memset(&ticket, 0, sizeof(struct tls13_nst_st));
 			ret = _gnutls13_recv_session_ticket(session, buf, &ticket);
 			if (ret < 0)
 				return gnutls_assert_val(ret);

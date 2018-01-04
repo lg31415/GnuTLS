@@ -456,6 +456,12 @@ struct gnutls_key_st {
 			/* Pre-shared key in use (if any) */
 			uint8_t *psk;
 			unsigned psk_size;
+			/*
+			 * 0-based index of the selected PSK.
+			 * This only applies if the HSK_PSK_SELECTED flag is set in internals.hsk_flags,
+			 * which signals a PSK has indeed been selected.
+			 */
+			unsigned psk_selected;
 			/* the current (depending on state) secret, can be
 			 * early_secret, client_early_traffic_secret, ... */
 			uint8_t temp_secret[MAX_HASH_SIZE];

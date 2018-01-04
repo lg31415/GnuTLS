@@ -272,15 +272,12 @@ static int
 server_send_params(gnutls_session_t session, gnutls_buffer_t extdata)
 {
 	int ret;
-	gnutls_ext_priv_data_t epriv = NULL;
 
-	ret = _gnutls_hello_ext_get_priv(session,
-			GNUTLS_EXTENSION_PRE_SHARED_KEY, &epriv);
-	if (ret < 0)
+	if (!(session->internals.hsk_flags & HSK_PSK_SELECTED))
 		return 0;
 
 	ret = _gnutls_buffer_append_prefix(extdata, 16,
-			((psk_ext_st *) epriv)->selected_identity);
+			session->key.proto.tls13.psk_selected);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -400,7 +397,6 @@ static int server_recv_params(gnutls_session_t session,
 	unsigned hash_size;
 
 	memset(&binder_recvd, 0, sizeof(gnutls_datum_t));
-	_gnutls_hello_ext_unset_priv(session, GNUTLS_EXTENSION_PRE_SHARED_KEY);
 
 	/* No credentials - this extension is not applicable */
 	if (!pskcred->hint)
@@ -460,15 +456,11 @@ static int server_recv_params(gnutls_session_t session,
 		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 	}
 
-	priv->selected_identity = 0;
-	_gnutls_hello_ext_set_priv(session,
-			GNUTLS_EXTENSION_PRE_SHARED_KEY,
-			(gnutls_ext_priv_data_t) priv);
-
 	session->internals.hsk_flags |= HSK_PSK_SELECTED;
 	/* Reference the selected pre-shared key */
 	session->key.proto.tls13.psk = key.data;
 	session->key.proto.tls13.psk_size = key.size;
+	session->key.proto.tls13.psk_selected = 0;
 	_gnutls_free_datum(&binder_recvd);
 
 	return 0;

@@ -236,8 +236,6 @@ static void handshake_internal_state_clear1(gnutls_session_t session)
 
 	session->internals.hrr_cs[0] = CS_INVALID_MAJOR;
 	session->internals.hrr_cs[1] = CS_INVALID_MINOR;
-
-	_gnutls_free_datum(&session->internals.tls13_psk);
 }
 
 /* This function will clear all the variables in internals

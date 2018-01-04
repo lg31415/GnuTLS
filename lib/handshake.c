@@ -1769,8 +1769,8 @@ read_server_hello(gnutls_session_t session,
 	if (vers->tls13_sem) {
 		/* TLS 1.3 Early Secret */
 		if (session->internals.hsk_flags & HSK_PSK_SELECTED) {
-			psk = session->internals.tls13_psk.data;
-			psk_size = session->internals.tls13_psk.size;
+			psk = session->key.proto.tls13.psk;
+			psk_size = session->key.proto.tls13.psk_size;
 		}
 
 		ret = _tls13_init_secret(session, psk, psk_size);
@@ -1788,8 +1788,11 @@ read_server_hello(gnutls_session_t session,
 
 cleanup:
 
-	if (session->internals.hsk_flags & HSK_PSK_SELECTED)
-		_gnutls_free_datum(&session->internals.tls13_psk);
+	if (session->internals.hsk_flags & HSK_PSK_SELECTED) {
+		gnutls_free(session->key.proto.tls13.psk);
+		session->key.proto.tls13.psk = NULL;
+		session->key.proto.tls13.psk_size = 0;
+	}
 
 	return ret;
 }
@@ -2029,8 +2032,8 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 		if (vers->tls13_sem) {
 			/* TLS 1.3 Early Secret */
 			if (session->internals.hsk_flags & HSK_PSK_SELECTED) {
-				psk = session->internals.tls13_psk.data;
-				psk_size = session->internals.tls13_psk.size;
+				psk = session->key.proto.tls13.psk;
+				psk_size = session->key.proto.tls13.psk_size;
 			}
 
 			ret = _tls13_init_secret(session, psk, psk_size);
@@ -2132,8 +2135,11 @@ int _gnutls_send_server_hello(gnutls_session_t session, int again)
 				   GNUTLS_HANDSHAKE_SERVER_HELLO);
 
 fail:
-	if (session->internals.hsk_flags & HSK_PSK_SELECTED)
-		_gnutls_free_datum(&session->internals.tls13_psk);
+	if (session->internals.hsk_flags & HSK_PSK_SELECTED) {
+		gnutls_free(session->key.proto.tls13.psk);
+		session->key.proto.tls13.psk = NULL;
+		session->key.proto.tls13.psk_size = 0;
+	}
 	_gnutls_buffer_clear(&buf);
 	return ret;
 }

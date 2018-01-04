@@ -259,8 +259,8 @@ client_send_params(gnutls_session_t session,
 	extdata_len += (hash_size + 1);
 
 	/* Reference the selected pre-shared key */
-	session->internals.tls13_psk.data = key.data;
-	session->internals.tls13_psk.size = key.size;
+	session->key.proto.tls13.psk = key.data;
+	session->key.proto.tls13.psk_size = key.size;
 	ret = extdata_len;
 
 cleanup:
@@ -467,8 +467,8 @@ static int server_recv_params(gnutls_session_t session,
 
 	session->internals.hsk_flags |= HSK_PSK_SELECTED;
 	/* Reference the selected pre-shared key */
-	session->internals.tls13_psk.data = key.data;
-	session->internals.tls13_psk.size = key.size;
+	session->key.proto.tls13.psk = key.data;
+	session->key.proto.tls13.psk_size = key.size;
 	_gnutls_free_datum(&binder_recvd);
 
 	return 0;

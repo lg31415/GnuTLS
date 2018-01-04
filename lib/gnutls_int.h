@@ -453,6 +453,9 @@ struct gnutls_key_st {
 	/* The union contents depend on the negotiated protocol */
 	union {
 		struct {
+			/* Pre-shared key in use (if any) */
+			uint8_t *psk;
+			unsigned psk_size;
 			/* the current (depending on state) secret, can be
 			 * early_secret, client_early_traffic_secret, ... */
 			uint8_t temp_secret[MAX_HASH_SIZE];
@@ -1178,7 +1181,6 @@ typedef struct {
 	 * they are reset to zero prior to handshake start by gnutls_handshake. */
 	unsigned hsk_flags;
 	time_t last_key_update;
-	gnutls_datum_t tls13_psk;
 	/* Read-only pointer to the full ClientHello message */ 
 	gnutls_buffer_st full_client_hello; 
 	/* The offset at which extensions start in the ClientHello buffer */ 

@@ -66,20 +66,37 @@ static int unpack_ticket(gnutls_datum_t *state,
 		gnutls_mac_algorithm_t *kdf_id,
 		gnutls_datum_t *rms)
 {
+	int kdf;
 	unsigned rms_len;
 	unsigned char *p;
+	size_t expected_len = sizeof(uint16_t) + sizeof(uint32_t);
 
 	if (unlikely(state == NULL || kdf_id == NULL || rms == NULL))
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
+	if (state->size <= expected_len)
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
 	p = state->data;
 
-	*kdf_id = (gnutls_mac_algorithm_t) _gnutls_read_uint16(p);
+	kdf = _gnutls_read_uint16(p);
 	p += sizeof(uint16_t);
 
 	rms_len = (unsigned) _gnutls_read_uint32(p);
 	p += sizeof(uint32_t);
 
+	/* Check if the MAC ID we got is valid */
+	*kdf_id = (gnutls_mac_algorithm_t) kdf;
+	if (_gnutls_mac_to_entry(*kdf_id) == NULL)
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	/* Check if the whole ticket is large enough */
+	expected_len += rms_len;
+
+	if (state->size != expected_len)
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	/* Read the rest of the ticket (the resumption master secret, basically) */
 	rms->size = rms_len;
 	rms->data = gnutls_malloc(rms->size);
 	if (!rms->data)
@@ -428,32 +445,84 @@ cleanup:
 	return ret;
 }
 
-int _gnutls13_recv_session_ticket2(gnutls_session_t session, gnutls_datum_t *dat,
-		struct tls13_nst_st *ticket)
+/*
+ * Parse the ticket in 'ticket' and return the resumption master secret
+ * and the KDF ID associated to it.
+ */
+int _gnutls13_unpack_session_ticket(gnutls_session_t session,
+		gnutls_datum_t *data,
+		gnutls_datum_t *rms, gnutls_mac_algorithm_t *kdf_id)
 {
 	int ret;
-	gnutls_buffer_st buf;
+	const unsigned char *p = data->data;
+	ssize_t data_size = data->size;
+	struct ticket_st ticket;
+	gnutls_datum_t decrypted;
 
-	if (unlikely(dat == NULL))
+	if (unlikely(data == NULL || rms == NULL || kdf_id == NULL))
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+	if (data_size == 0)
+		return 0;
 
-	_gnutls_buffer_init(&buf);
-	_gnutls_buffer_append_data(&buf, dat->data, dat->size);
-	ret = _gnutls13_recv_session_ticket(session, &buf, ticket);
-	_gnutls_buffer_clear(&buf);
+	memset(&ticket, 0, sizeof(struct ticket_st));
+	memset(&decrypted, 0, sizeof(gnutls_datum_t));
 
-	if (ret < 0)
-		gnutls_assert();
-	return ret;
-}
+	/* Parse the ticket fields.
+	 * Format:
+	 *  Key name
+	 *  IV
+	 *  data length
+	 *  encrypted data
+	 *  MAC
+	 */
+	DECR_LEN(data_size, KEY_NAME_SIZE);
+	memcpy(ticket.key_name, p, KEY_NAME_SIZE);
+	p += KEY_NAME_SIZE;
 
-int _gnutls13_parse_session_ticket(struct tls13_nst_st *ticket)
-{
-	int ret;
+	if (memcmp(ticket.key_name,
+			&session->key.session_ticket_key[NAME_POS],
+			KEY_NAME_SIZE)) {
+		session->internals.session_ticket_renew = 1;
+		return 0;
+	}
 
-	/* TODO implement this */
+	DECR_LEN(data_size, IV_SIZE);
+	memcpy(ticket.IV, p, IV_SIZE);
+	p += IV_SIZE;
 
-	return 0;
+	DECR_LEN(data_size, 2);
+	ticket.encrypted_state_len = _gnutls_read_uint16(p);
+	p += 2;
+
+	ticket.encrypted_state = gnutls_malloc(ticket.encrypted_state_len);
+	if (!ticket.encrypted_state)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+	DECR_LEN(data_size, ticket.encrypted_state_len);
+	memcpy(ticket.encrypted_state, p, ticket.encrypted_state_len);
+	p += ticket.encrypted_state_len;
+
+	DECR_LEN(data_size, MAC_SIZE);
+	memcpy(ticket.mac, p, MAC_SIZE);
+
+	/* Check MAC and decrypt ticket */
+	ret = decrypt_ticket(session, &ticket, &decrypted);
+	/* Do not free, as the ticket is decrypted in-place */
+//	gnutls_free(ticket.encrypted_state);
+
+	if (ret < 0) {
+		session->internals.session_ticket_renew = 1;
+		return 0;
+	}
+
+	/* Return ticket parameters */
+	ret = unpack_ticket(&decrypted, kdf_id, rms);
+	if (ret < 0) {
+		session->internals.session_ticket_renew = 1;
+		return 0;
+	}
+
+	return decrypted.size;
 }
 
 static int parse_nst_extension(void *ctx, uint16_t tls_id, const uint8_t *data, int data_size)

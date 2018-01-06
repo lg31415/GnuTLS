@@ -33,8 +33,8 @@ struct tls13_nst_st {
 int _gnutls13_send_session_ticket(gnutls_session_t session, unsigned again);
 int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf, struct tls13_nst_st *ticket);
 
-/* TODO maybe we don't need these two */
-int _gnutls13_recv_session_ticket2(gnutls_session_t session, gnutls_datum_t *dat, struct tls13_nst_st *ticket);
-int _gnutls13_parse_session_ticket(struct tls13_nst_st *ticket);
+int _gnutls13_unpack_session_ticket(gnutls_session_t session,
+		gnutls_datum_t *data,
+		gnutls_datum_t *rms, gnutls_mac_algorithm_t *kdf_id);
 
 #endif

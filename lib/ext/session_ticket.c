@@ -269,45 +269,7 @@ cleanup:
 
 int _gnutls_decrypt_session_ticket(gnutls_session_t session, struct ticket_st *ticket)
 {
-	int ret;
-	gnutls_ext_priv_data_t epriv;
-	session_ticket_ext_st *priv = NULL;
-
-	ret = _gnutls_hello_ext_get_priv(session,
-					 GNUTLS_EXTENSION_SESSION_TICKET,
-					 &epriv);
-	if (ret < 0)
-		return 0;
-	priv = epriv;
-
-	/* TODO fix this */
-//	ret = decrypt_ticket(session, priv, ticket);
-//	if (ret < 0)
-//		return 0;
-
-	return 0;
-}
-
-int _gnutls_encrypt_session_ticket(gnutls_session_t session, struct ticket_st *ticket)
-{
-	int ret;
-	gnutls_ext_priv_data_t epriv;
-	session_ticket_ext_st *priv = NULL;
-
-	ret = _gnutls_hello_ext_get_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			&epriv);
-	if (ret < 0)
-		return 0;
-
-	/* Generate a ticket and encrypt it with priv->key */
-	/* TODO fix this */
-//	ret = encrypt_ticket(session, priv, ticket);
-//	if (ret < 0) {
-//		gnutls_assert();
-//		return ret;
-//	}
-
+	/* TODO this function is no longer needed and should be removed */
 	return 0;
 }
 

@@ -417,9 +417,12 @@ _gnutls13_recv_async_handshake(gnutls_session_t session, gnutls_buffer_st *buf)
 			if (ret < 0)
 				return gnutls_assert_val(ret);
 
-			ret = _gnutls13_session_ticket_set(session, &ticket);
+			ret = _gnutls13_session_ticket_set(session, &ticket,
+					session->key.proto.tls13.ap_rms,
+					session->key.proto.tls13.temp_secret_size);
 			if (ret < 0)
 				return gnutls_assert_val(ret);
+			memset(&ticket, 0, sizeof(struct tls13_nst_st));
 			break;
 		default:
 			gnutls_assert();

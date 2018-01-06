@@ -7,8 +7,7 @@
 extern const hello_ext_entry_st ext_pre_shared_key;
 
 int _gnutls13_session_ticket_set(gnutls_session_t session,
-		struct tls13_nst_st *ticket);
-int _gnutls13_session_ticket_get(gnutls_session_t session,
-		struct tls13_nst_st *ticket);
+		struct tls13_nst_st *ticket,
+		const uint8_t *rms, size_t rms_size);
 
 #endif

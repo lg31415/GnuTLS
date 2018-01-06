@@ -33,10 +33,12 @@
 #include <ext/pre_shared_key.h>
 
 typedef struct {
-	uint16_t selected_identity;
-	struct tls13_nst_st session_ticket;
-	size_t session_ticket_len;
+	struct tls13_nst_st *session_ticket;
+	uint8_t *rms;
+	size_t rms_size;
 } psk_ext_st;
+
+static int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket);
 
 static int
 compute_psk_from_ticket(const mac_entry_st *prf,
@@ -412,7 +414,6 @@ static int server_recv_params(gnutls_session_t session,
 	struct psk_parser_st psk_parser;
 	struct psk_st psk;
 	struct ticket_st *ticket = NULL;
-	gnutls_ext_priv_data_t epriv;
 
 	memset(&binder_recvd, 0, sizeof(gnutls_datum_t));
 	memset(&username, 0, sizeof(gnutls_datum_t));
@@ -624,54 +625,141 @@ static int _gnutls_psk_recv_params(gnutls_session_t session,
 	}
 }
 
-static void _gnutls_psk_deinit(gnutls_ext_priv_data_t epriv)
+static void destroy_ticket(struct tls13_nst_st *ticket)
 {
-	if (epriv)
-		gnutls_free(epriv);
+	if (ticket) {
+		_gnutls_free_datum(&ticket->ticket);
+		_gnutls_free_datum(&ticket->ticket_nonce);
+		memset(ticket, 0, sizeof(struct tls13_nst_st));
+		gnutls_free(ticket);
+	}
 }
 
-int _gnutls13_session_ticket_set(gnutls_session_t session, struct tls13_nst_st *ticket)
+static int copy_ticket(struct tls13_nst_st *src, struct tls13_nst_st *dst)
 {
-	psk_ext_st *priv;
-	gnutls_ext_priv_data_t epriv;
+	dst->ticket_lifetime = src->ticket_lifetime;
+	dst->ticket_age_add = src->ticket_age_add;
 
-	if (_gnutls_hello_ext_get_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			&epriv) == 0) {
-		priv = epriv;
-	} else {
-		priv = gnutls_malloc(sizeof(psk_ext_st));
-		if (!priv)
+	if (src->ticket_nonce.size > 0) {
+		dst->ticket_nonce.data = gnutls_malloc(src->ticket_nonce.size);
+		if (dst->ticket_nonce.data == NULL)
 			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-		memset(priv, 0, sizeof(psk_ext_st));
+		dst->ticket_nonce.size = src->ticket_nonce.size;
+		memcpy(dst->ticket_nonce.data, src->ticket_nonce.data, src->ticket_nonce.size);
 	}
 
-	memcpy(&priv->session_ticket, ticket, sizeof(struct tls13_nst_st));
-	priv->session_ticket_len = sizeof(struct tls13_nst_st);
-
-	_gnutls_hello_ext_set_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			(gnutls_ext_priv_data_t) priv);
+	if (src->ticket.size > 0) {
+		dst->ticket.data = gnutls_malloc(src->ticket.size);
+		if (dst->ticket.data == NULL)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		dst->ticket.size = src->ticket.size;
+		memcpy(dst->ticket.data, src->ticket.data, src->ticket.size);
+	}
 
 	return 0;
 }
 
-int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket)
+static void _gnutls_psk_deinit(gnutls_ext_priv_data_t epriv)
 {
 	psk_ext_st *priv;
+
+	if (epriv) {
+		priv = epriv;
+
+		destroy_ticket(priv->session_ticket);
+
+		if (priv->rms) {
+			gnutls_free(priv->rms);
+			priv->rms = NULL;
+			priv->rms_size = 0;
+		}
+
+		gnutls_free(priv);
+	}
+}
+
+/*
+ * Stores a session ticket locally.
+ * All the fields of the ticket are copied, so they can safely be freed when this function returns.
+ * The resumption master secret ('rms') is also copied.
+ */
+int _gnutls13_session_ticket_set(gnutls_session_t session, struct tls13_nst_st *ticket,
+		const uint8_t *rms, size_t rms_size)
+{
+	psk_ext_st *priv = NULL;
+	struct tls13_nst_st *src, *dst;
+
+	if (unlikely(ticket == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+	if (unlikely(rms == NULL || rms_size == 0))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	priv = gnutls_calloc(1, sizeof(psk_ext_st));
+	if (!priv)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+	priv->session_ticket = gnutls_calloc(1, sizeof(struct tls13_nst_st));
+	if (!priv->session_ticket) {
+		goto cleanup;
+	}
+
+	/* Copy the ticket */
+	src = ticket;
+	dst = priv->session_ticket;
+
+	if (copy_ticket(src, dst) < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	/* Copy the resumption master secret ('rms') for this session */
+	priv->rms = gnutls_calloc(1, rms_size);
+	if (!priv->rms) {
+		gnutls_assert();
+		goto cleanup;
+	}
+	priv->rms_size = rms_size;
+	memcpy(priv->rms, rms, rms_size);
+
+	_gnutls_hello_ext_set_priv(session,
+			GNUTLS_EXTENSION_SESSION_TICKET,
+			(gnutls_ext_priv_data_t) priv);
+	return 0;
+
+cleanup:
+	_gnutls_psk_deinit(priv);
+	return GNUTLS_E_MEMORY_ERROR;
+}
+
+/*
+ * Copy the locally stored session ticket to 'ticket'.
+ * The fields of 'ticket' are copied not referenced, so they can be safely freed
+ * after this function returns.
+ */
+static int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket)
+{
+	int ret;
+	psk_ext_st *priv;
 	gnutls_ext_priv_data_t epriv;
+	struct tls13_nst_st *src, *dst;
+
+	if (unlikely(ticket == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 	if (_gnutls_hello_ext_get_priv(session,
 			GNUTLS_EXTENSION_SESSION_TICKET,
 			&epriv) < 0)
-		return 0;
+		return GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE;
 
 	priv = epriv;
+	src = priv->session_ticket;
+	dst = ticket;
 
-	if (priv->session_ticket_len > 0)
-		memcpy(ticket, &priv->session_ticket, priv->session_ticket_len);
+	if ((ret = copy_ticket(src, dst)) < 0) {
+		destroy_ticket(ticket);
+		return gnutls_assert_val(ret);
+	}
 
-	return priv->session_ticket_len;
+	return 0;
 }
 
 static int
@@ -683,16 +771,17 @@ _gnutls_psk_pack(gnutls_ext_priv_data_t epriv, gnutls_buffer_t buf)
 	if (!priv)
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
-	if (priv->session_ticket_len > 0) {
-		BUFFER_APPEND_NUM(buf, priv->session_ticket.ticket_lifetime);
-		BUFFER_APPEND_NUM(buf, priv->session_ticket.ticket_age_add);
-		BUFFER_APPEND_PFX4(buf,
-				priv->session_ticket.ticket_nonce.data,
-				priv->session_ticket.ticket_nonce.size);
-		BUFFER_APPEND_PFX4(buf,
-				priv->session_ticket.ticket.data,
-				priv->session_ticket.ticket.size);
-	}
+	BUFFER_APPEND_NUM(buf, priv->session_ticket->ticket_lifetime);
+	BUFFER_APPEND_NUM(buf, priv->session_ticket->ticket_age_add);
+	BUFFER_APPEND_PFX4(buf,
+			priv->session_ticket->ticket_nonce.data,
+			priv->session_ticket->ticket_nonce.size);
+	BUFFER_APPEND_PFX4(buf,
+			priv->session_ticket->ticket.data,
+			priv->session_ticket->ticket.size);
+	BUFFER_APPEND_PFX4(buf,
+			priv->rms,
+			priv->rms_size);
 
 	return 0;
 }
@@ -704,14 +793,27 @@ _gnutls_psk_unpack(gnutls_buffer_t buf, gnutls_ext_priv_data_t *_epriv)
 	psk_ext_st *priv = NULL;
 	gnutls_ext_priv_data_t epriv;
 
-	priv = gnutls_malloc(sizeof(psk_ext_st));
+	priv = gnutls_calloc(1, sizeof(psk_ext_st));
 	if (!priv)
 		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+	priv->session_ticket = gnutls_calloc(1, sizeof(struct tls13_nst_st));
+	if (!priv->session_ticket) {
+		ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		goto error;
+	}
 
-	BUFFER_POP_DATUM(buf, &priv->session_ticket.ticket);
-	BUFFER_POP_DATUM(buf, &priv->session_ticket.ticket_nonce);
-	BUFFER_POP_NUM(buf, priv->session_ticket.ticket_age_add);
-	BUFFER_POP_NUM(buf, priv->session_ticket.ticket_lifetime);
+	BUFFER_POP_NUM(buf, priv->session_ticket->ticket_lifetime);
+	BUFFER_POP_NUM(buf, priv->session_ticket->ticket_age_add);
+	BUFFER_POP_DATUM(buf, &priv->session_ticket->ticket_nonce);
+	BUFFER_POP_DATUM(buf, &priv->session_ticket->ticket);
+
+	BUFFER_POP_NUM(buf, priv->rms_size);
+	priv->rms = gnutls_calloc(1, priv->rms_size);
+	if (!priv->rms) {
+		ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		goto error;
+	}
+	BUFFER_POP(buf, priv->rms, priv->rms_size);
 
 	epriv = priv;
 	*_epriv = epriv;
@@ -720,7 +822,7 @@ _gnutls_psk_unpack(gnutls_buffer_t buf, gnutls_ext_priv_data_t *_epriv)
 
 error:
 	/* BUFFER_POP_DATUM and BUFFER_POP_NUM expect a label called 'error' to exist */
-	gnutls_free(priv);
+	_gnutls_psk_deinit(priv);
 	return ret;
 }
 

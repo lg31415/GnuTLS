@@ -305,7 +305,7 @@ gnutls_x509_crt_import(gnutls_x509_crt_t cert,
 	cert->expanded = 1;
 
 	result =
-	    asn1_der_decoding(&cert->cert, cert->der.data, cert->der.size, NULL);
+	    _asn1_strict_der_decode(&cert->cert, cert->der.data, cert->der.size, NULL);
 	if (result != ASN1_SUCCESS) {
 		result = _gnutls_asn2err(result);
 		gnutls_assert();
@@ -3832,7 +3832,7 @@ gnutls_x509_crt_get_authority_info_access(gnutls_x509_crt_t crt,
 		return _gnutls_asn2err(ret);
 	}
 
-	ret = asn1_der_decoding(&c2, aia.data, aia.size, NULL);
+	ret = _asn1_strict_der_decode(&c2, aia.data, aia.size, NULL);
 	/* asn1_print_structure (stdout, c2, "", ASN1_PRINT_ALL); */
 	_gnutls_free_datum(&aia);
 	if (ret != ASN1_SUCCESS) {

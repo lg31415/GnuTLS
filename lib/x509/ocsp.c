@@ -200,7 +200,7 @@ gnutls_ocsp_req_import(gnutls_ocsp_req_t req, const gnutls_datum_t * data)
 	}
 	req->init = 1;
 
-	ret = asn1_der_decoding(&req->req, data->data, data->size, NULL);
+	ret = _asn1_strict_der_decode(&req->req, data->data, data->size, NULL);
 	if (ret != ASN1_SUCCESS) {
 		gnutls_assert();
 		return _gnutls_asn2err(ret);
@@ -261,7 +261,7 @@ gnutls_ocsp_resp_import(gnutls_ocsp_resp_t resp,
 	}
 
 	resp->init = 1;
-	ret = asn1_der_decoding(&resp->resp, data->data, data->size, NULL);
+	ret = _asn1_strict_der_decode(&resp->resp, data->data, data->size, NULL);
 	if (ret != ASN1_SUCCESS) {
 		gnutls_assert();
 		return _gnutls_asn2err(ret);
@@ -294,7 +294,7 @@ gnutls_ocsp_resp_import(gnutls_ocsp_resp_t resp,
 		}
 
 		ret =
-		    asn1_der_decoding(&resp->basicresp, resp->der.data, resp->der.size,
+		    _asn1_strict_der_decode(&resp->basicresp, resp->der.data, resp->der.size,
 				      NULL);
 		if (ret != ASN1_SUCCESS) {
 			gnutls_assert();

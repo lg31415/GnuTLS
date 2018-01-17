@@ -77,9 +77,9 @@ int _gnutls13_recv_finished(gnutls_session_t session)
 	hash_size = session->security_parameters.prf->output_size;
 
 	if (session->security_parameters.entity == GNUTLS_CLIENT)
-		base_key = session->key.hs_skey;
+		base_key = session->key.proto.tls13.hs_skey;
 	else
-		base_key = session->key.hs_ckey;
+		base_key = session->key.proto.tls13.hs_ckey;
 
 	ret = _gnutls13_compute_finished(session->security_parameters.prf,
 			base_key, hash_size,

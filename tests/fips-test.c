@@ -95,17 +95,21 @@ void doit(void)
 	}
 	gnutls_privkey_deinit(privkey);
 
-	ret = gnutls_x509_privkey_init(&xprivkey);
-	if (ret < 0) {
-		fail("gnutls_privkey_init failed\n");
-	}
-	gnutls_x509_privkey_deinit(xprivkey);
-
 	ret = gnutls_init(&session, 0);
 	if (ret < 0) {
 		fail("gnutls_init failed\n");
 	}
 	gnutls_deinit(session);
+
+	ret = gnutls_x509_privkey_init(&xprivkey);
+	if (ret < 0) {
+		fail("gnutls_privkey_init failed\n");
+	}
+	ret = gnutls_x509_privkey_generate(xprivkey, GNUTLS_PK_RSA, 512, 0);
+	if (ret != GNUTLS_E_PK_GENERATION_ERROR) {
+		fail("gnutls_x509_privkey_generate succeeded (%d) for 512-bit key\n", ret);
+	}
+	gnutls_x509_privkey_deinit(xprivkey);
 
 	/* Test when FIPS140 is set to error state */
 	_gnutls_lib_simulate_error();

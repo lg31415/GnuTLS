@@ -30,7 +30,7 @@
 #include <extras/hex.h>
 #include <random.h>
 
-unsigned int _gnutls_lib_mode = LIB_STATE_POWERON;
+unsigned int _gnutls_lib_state = LIB_STATE_POWERON;
 #ifdef ENABLE_FIPS140
 
 #include <dlfcn.h>
@@ -38,13 +38,11 @@ unsigned int _gnutls_lib_mode = LIB_STATE_POWERON;
 #define FIPS_KERNEL_FILE "/proc/sys/crypto/fips_enabled"
 #define FIPS_SYSTEM_FILE "/etc/system-fips"
 
-static int _fips_mode = -1;
+static gnutls_fips_mode_t _fips_mode = -1;
 static int _skip_integrity_checks = 0;
 
 /* Returns:
- * 0 - FIPS mode disabled
- * 1 - FIPS mode enabled and enforced
- * 2 - FIPS in testing mode
+ * a gnutls_fips_mode_t value
  */
 unsigned _gnutls_fips_mode_enabled(void)
 {
@@ -52,7 +50,7 @@ unsigned f1p = 0, f2p;
 FILE* fd;
 const char *p;
 
-	if (_fips_mode != -1)
+	if (_fips_mode != (gnutls_fips_mode_t)-1)
 		return _fips_mode;
 
 	p = secure_getenv("GNUTLS_SKIP_FIPS_INTEGRITY_CHECKS");
@@ -65,9 +63,13 @@ const char *p;
 		if (p[0] == '1')
 			_fips_mode = 1;
 		else if (p[0] == '2')
-			_fips_mode = 2;
+			_fips_mode = GNUTLS_FIPS140_SELFTESTS;
+		else if (p[0] == '3')
+			_fips_mode = GNUTLS_FIPS140_LAX;
+		else if (p[0] == '4')
+			_fips_mode = GNUTLS_FIPS140_LOG;
 		else
-			_fips_mode = 0;
+			_fips_mode = GNUTLS_FIPS140_DISABLED;
 		return _fips_mode;
 	}
 
@@ -84,7 +86,7 @@ const char *p;
 
 	if (f1p != 0 && f2p != 0) {
 		_gnutls_debug_log("FIPS140-2 mode enabled\n");
-		_fips_mode = 1;
+		_fips_mode = GNUTLS_FIPS140_STRICT;
 		return _fips_mode;
 	}
 
@@ -92,11 +94,11 @@ const char *p;
 		/* a funny state where self tests are performed
 		 * and ignored */
 		_gnutls_debug_log("FIPS140-2 ZOMBIE mode enabled\n");
-		_fips_mode = 2;
+		_fips_mode = GNUTLS_FIPS140_SELFTESTS;
 		return _fips_mode;
 	}
 
-	_fips_mode = 0;
+	_fips_mode = GNUTLS_FIPS140_DISABLED;
 	return _fips_mode;
 }
 
@@ -104,8 +106,8 @@ const char *p;
  * performed, but its output is ignored. */
 void _gnutls_fips_mode_reset_zombie(void)
 {
-	if (_fips_mode == 2) {
-		_fips_mode = 0;
+	if (_fips_mode == GNUTLS_FIPS140_SELFTESTS) {
+		_fips_mode = GNUTLS_FIPS140_DISABLED;
 	}
 }
 
@@ -397,7 +399,9 @@ error:
 /**
  * gnutls_fips140_mode_enabled:
  *
- * Checks whether this library is in FIPS140 mode.
+ * Checks whether this library is in FIPS140 mode. The returned
+ * value corresponds to the library mode as set with
+ * gnutls_fips140_set_mode().
  *
  * Returns: return non-zero if true or zero if false.
  *
@@ -406,12 +410,39 @@ error:
 unsigned gnutls_fips140_mode_enabled(void)
 {
 #ifdef ENABLE_FIPS140
-int ret = _gnutls_fips_mode_enabled();
+	int ret = _gnutls_fips_mode_enabled();
 
-	if (ret == 1)
+	if (ret > GNUTLS_FIPS140_DISABLED)
 		return ret;
 #endif
 	return 0;
+}
+
+/**
+ * gnutls_fips140_set_mode:
+ * @flags: should be zero
+ *
+ * By default GnuTLS rejects all operations which are prohibited by
+ * FIPS140-2 guidelines. This function allows software to switch
+ * to soft failures and allow/log such operations.
+ *
+ * Since: 3.6.2
+ **/
+void gnutls_fips140_set_mode(gnutls_fips_mode_t mode, unsigned flags)
+{
+#ifdef ENABLE_FIPS140
+	gnutls_fips_mode_t prev = _gnutls_fips_mode_enabled();
+	if (prev == GNUTLS_FIPS140_DISABLED || prev == GNUTLS_FIPS140_SELFTESTS) {
+		/* we need to run self-tests first to be in FIPS140-2 mode */
+		_gnutls_audit_log(NULL, "Cannot switch library to FIPS140-2 mode\n");
+	}
+
+	if (mode == GNUTLS_FIPS140_SELFTESTS) {
+		_gnutls_audit_log(NULL, "Cannot switch library to FIPS140-2 self-tests mode\n");
+	}
+
+	_fips_mode = mode;
+#endif
 }
 
 void _gnutls_lib_simulate_error(void)

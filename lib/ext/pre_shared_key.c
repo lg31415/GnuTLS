@@ -325,9 +325,8 @@ server_read_identities(const unsigned char **data_p, long *len_p,
 		 * The obfuscated ticket age field should be zero for out-of-band PSKs.
 		 * We'll extend this later when we support PSKs derived from NST.
 		 */
-		if (ob_ticket_age == 0 &&
-				username->size == identity_len &&
-				safe_memcmp(username->data, identity, identity_len) == 0) {
+		if (username->size == identity_len &&
+			safe_memcmp(username->data, identity, identity_len) == 0) {
 			psk_found = 1;
 			break;
 		}

@@ -61,11 +61,22 @@ void doit(void)
 	}
 	gnutls_cipher_deinit(ch);
 
+	ret =
+	    gnutls_cipher_init(&ch, GNUTLS_CIPHER_ARCFOUR_128, &key, &iv);
+	if (ret != GNUTLS_E_UNWANTED_ALGORITHM) {
+		fail("gnutls_cipher_init succeeded for arcfour\n");
+	}
+
 	ret = gnutls_hmac_init(&mh, GNUTLS_MAC_SHA1, key.data, key.size);
 	if (ret < 0) {
 		fail("gnutls_hmac_init failed\n");
 	}
 	gnutls_hmac_deinit(mh, NULL);
+
+	ret = gnutls_hmac_init(&mh, GNUTLS_MAC_MD5, key.data, key.size);
+	if (ret != GNUTLS_E_UNWANTED_ALGORITHM) {
+		fail("gnutls_hmac_init succeeded for md5\n");
+	}
 
 	ret = gnutls_rnd(GNUTLS_RND_NONCE, key16, sizeof(key16));
 	if (ret < 0) {

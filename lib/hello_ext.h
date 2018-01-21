@@ -74,7 +74,7 @@ inline static int _gnutls_ext_get_extensions_offset(gnutls_session_t session)
 	return session->internals.extensions_offset;
 }
 
-void _gnutls_ext_set_full_client_hello(gnutls_session_t session,
+int _gnutls_ext_set_full_client_hello(gnutls_session_t session,
 		handshake_buffer_st *recv_buf);
 int _gnutls_ext_get_full_client_hello(gnutls_session_t session,
 		gnutls_datum_t *datum);

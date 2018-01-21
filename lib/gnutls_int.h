@@ -465,7 +465,7 @@ struct gnutls_key_st {
 			 * This only applies if the HSK_PSK_SELECTED flag is set in internals.hsk_flags,
 			 * which signals a PSK has indeed been selected.
 			 */
-			unsigned psk_selected;
+			unsigned psk_index;
 			/* the current (depending on state) secret, can be
 			 * early_secret, client_early_traffic_secret, ... */
 			uint8_t temp_secret[MAX_HASH_SIZE];
@@ -1203,11 +1203,6 @@ typedef struct {
 	gnutls_buffer_st full_client_hello; 
 	/* The offset at which extensions start in the ClientHello buffer */ 
 	int extensions_offset; 
-
-	unsigned crt_requested; /* 1 if client auth was requested (i.e., client cert).
-	 * In case of a server this holds 1 if we should wait
-	 * for a client certificate verify
-	 */
 
 	gnutls_buffer_st hb_local_data;
 	gnutls_buffer_st hb_remote_data;

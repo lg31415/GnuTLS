@@ -1254,8 +1254,11 @@ int _gnutls_parse_record_buffered_msgs(gnutls_session_t session)
 			 */
 			if (recv_buf[0].length == recv_buf[0].data.length) {
 				/* Reference the full ClientHello in case an extension needs it */
-				if (recv_buf->htype == GNUTLS_HANDSHAKE_CLIENT_HELLO)
-					_gnutls_ext_set_full_client_hello(session, recv_buf);
+				if (recv_buf->htype == GNUTLS_HANDSHAKE_CLIENT_HELLO) {
+					ret = _gnutls_ext_set_full_client_hello(session, recv_buf);
+					if (ret < 0)
+						return gnutls_assert_val(ret);
+				}
 				return 0;
 			}
 			bufel =

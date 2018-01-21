@@ -486,25 +486,36 @@ int _gnutls_hello_ext_pack(gnutls_session_t session, gnutls_buffer_st *packed)
 	return 0;
 }
 
-void _gnutls_ext_set_full_client_hello(gnutls_session_t session,
+int _gnutls_ext_set_full_client_hello(gnutls_session_t session,
 		handshake_buffer_st *recv_buf)
 {
+	int ret;
 	gnutls_buffer_st *buf = &session->internals.full_client_hello;
+
 	_gnutls_buffer_clear(buf);
-	_gnutls_buffer_append_prefix(buf, 8, recv_buf->htype);
-	_gnutls_buffer_append_prefix(buf, 24, recv_buf->data.length);
-	_gnutls_buffer_append_data(buf, recv_buf->data.data, recv_buf->data.length);
+
+	if ((ret = _gnutls_buffer_append_prefix(buf, 8, recv_buf->htype)) < 0)
+		return gnutls_assert_val(ret);
+	if ((ret = _gnutls_buffer_append_prefix(buf, 24, recv_buf->data.length)) < 0)
+		return gnutls_assert_val(ret);
+	if ((ret = _gnutls_buffer_append_data(buf, recv_buf->data.data, recv_buf->data.length)) < 0)
+		return gnutls_assert_val(ret);
+
+	return 0;
 }
 
 int _gnutls_ext_get_full_client_hello(gnutls_session_t session,
 		gnutls_datum_t *datum)
 {
+	int ret;
 	gnutls_buffer_st *buf = &session->internals.full_client_hello;
 
 	if (!datum)
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
-	_gnutls_set_datum(datum, buf->data, buf->length);
+	if ((ret = _gnutls_set_datum(datum, buf->data, buf->length)) < 0)
+		return gnutls_assert_val(ret);
+
 	return buf->length;
 }
 

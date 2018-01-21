@@ -38,7 +38,7 @@ compute_binder_key(const mac_entry_st *prf,
 {
 	int ret;
 	char label[] = "ext_binder";
-	size_t label_len = strlen(label);
+	size_t label_len = sizeof(label) - 1;
 	uint8_t tmp_key[MAX_HASH_SIZE];
 
 	/* Compute HKDF-Extract(0, psk) */
@@ -78,9 +78,13 @@ compute_psk_binder(unsigned entity,
 			goto error;
 		}
 
-		gnutls_buffer_append_data(&handshake_buf,
+		ret = gnutls_buffer_append_data(&handshake_buf,
 				(const void *) (client_hello->data + displacement),
 				client_hello->size - displacement);
+		if (ret < 0) {
+			gnutls_assert();
+			goto error;
+		}
 
 		ext_offset -= displacement;
 		if (ext_offset <= 0) {
@@ -89,7 +93,7 @@ compute_psk_binder(unsigned entity,
 		}
 
 		/* This is a ClientHello message */
-		handshake_buf.data[0] = 1;
+		handshake_buf.data[0] = GNUTLS_HANDSHAKE_CLIENT_HELLO;
 
 		/*
 		 * At this point we have not yet added the binders to the ClientHello,
@@ -277,7 +281,7 @@ server_send_params(gnutls_session_t session, gnutls_buffer_t extdata)
 		return 0;
 
 	ret = _gnutls_buffer_append_prefix(extdata, 16,
-			session->key.proto.tls13.psk_selected);
+			session->key.proto.tls13.psk_index);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 
@@ -348,7 +352,7 @@ server_read_binders(const unsigned char **data_p, long *len_p,
 	while (len > 0) {
 		binder_len = *data;
 		if (binder_len == 0)
-			return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
+			return gnutls_assert_val(GNUTLS_E_ILLEGAL_PARAMETER);
 
 		DECR_LEN(len, 1);
 		data++;
@@ -392,11 +396,9 @@ static int server_recv_params(gnutls_session_t session,
 	uint16_t ttl_identities_len;
 	uint8_t binder_value[MAX_HASH_SIZE];
 	int psk_index = 0;
-	gnutls_datum_t binder_recvd;
+	gnutls_datum_t binder_recvd = { NULL, 0 };
 	gnutls_datum_t username, key;
 	unsigned hash_size;
-
-	memset(&binder_recvd, 0, sizeof(gnutls_datum_t));
 
 	/* No credentials - this extension is not applicable */
 	if (!pskcred->hint)
@@ -434,14 +436,14 @@ static int server_recv_params(gnutls_session_t session,
 
 	priv = gnutls_malloc(sizeof(psk_ext_st));
 	if (!priv) {
-		_gnutls_free_datum(&binder_recvd);
-		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		ret = gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		goto cleanup;
 	}
 
 	/* Get full ClientHello */
 	if (!_gnutls_ext_get_full_client_hello(session, &full_client_hello)) {
-		_gnutls_free_datum(&binder_recvd);
-		return 0;
+		ret = 0;
+		goto cleanup;
 	}
 
 	/* Compute the binder value for this PSK */
@@ -452,18 +454,26 @@ static int server_recv_params(gnutls_session_t session,
 			binder_value);
 	if (_gnutls_mac_get_algo_len(prf) != binder_recvd.size ||
 			safe_memcmp(binder_value, binder_recvd.data, binder_recvd.size)) {
-		_gnutls_free_datum(&binder_recvd);
-		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
+		ret = gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
+		goto cleanup;
 	}
 
 	session->internals.hsk_flags |= HSK_PSK_SELECTED;
 	/* Reference the selected pre-shared key */
 	session->key.proto.tls13.psk = key.data;
 	session->key.proto.tls13.psk_size = key.size;
-	session->key.proto.tls13.psk_selected = 0;
+	session->key.proto.tls13.psk_index = 0;
 	_gnutls_free_datum(&binder_recvd);
 
 	return 0;
+
+cleanup:
+	_gnutls_free_datum(&binder_recvd);
+
+	if (priv)
+		gnutls_free(priv);
+
+	return ret;
 }
 
 static int client_recv_params(gnutls_session_t session,
@@ -542,7 +552,7 @@ static int _gnutls_psk_recv_params(gnutls_session_t session,
 		if (session->internals.hsk_flags & HSK_PSK_KE_MODES_SENT)
 			return client_recv_params(session, data, len);
 		else
-			return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET);
+			return gnutls_assert_val(GNUTLS_E_RECEIVED_ILLEGAL_EXTENSION);
 	} else {
 		if (session->internals.hsk_flags & HSK_PSK_KE_MODES_RECEIVED) {
 			pskcred = (gnutls_psk_server_credentials_t)

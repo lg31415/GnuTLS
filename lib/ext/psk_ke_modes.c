@@ -23,6 +23,8 @@
 #include "gnutls_int.h"
 #include <ext/psk_ke_modes.h>
 
+#define PSK_DHE_KE 1
+
 static int
 send_params(gnutls_buffer_t extdata, uint8_t ke_modes_value)
 {
@@ -59,7 +61,7 @@ psk_ke_modes_send_params(gnutls_session_t session,
 			_gnutls_get_cred(session, GNUTLS_CRD_PSK);
 
 	if (cred) {
-		retval = send_params(extdata, 1);
+		retval = send_params(extdata, PSK_DHE_KE);
 		if (retval < 0)
 			gnutls_assert_val(retval);
 		else
@@ -82,17 +84,17 @@ psk_ke_modes_recv_params(gnutls_session_t session,
 
 	/* Server doesn't send psk_key_exchange_modes */
 	if (session->security_parameters.entity == GNUTLS_CLIENT)
-		return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET);
+		return gnutls_assert_val(GNUTLS_E_RECEIVED_ILLEGAL_EXTENSION);
 
 	ke_modes_len = *data;
 	DECR_LEN(len, 1);
 	data++;
 	if (ke_modes_len != 1)
-		return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET);
+		return gnutls_assert_val(GNUTLS_E_RECEIVED_ILLEGAL_EXTENSION);
 
 	ke_modes = *data;
 	/* TODO maybe we should send a HelloRetryRequest here? */
-	if (ke_modes != 1)
+	if (ke_modes != PSK_DHE_KE)
 		return gnutls_assert_val(GNUTLS_E_INSUFFICIENT_CREDENTIALS);
 
 	session->internals.hsk_flags |= HSK_PSK_KE_MODES_RECEIVED;

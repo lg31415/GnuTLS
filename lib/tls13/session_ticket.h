@@ -27,14 +27,24 @@ struct tls13_nst_st {
 	uint32_t ticket_age_add;
 	gnutls_datum_t ticket_nonce;
 	gnutls_datum_t ticket;
-	gnutls_mac_algorithm_t kdf_id;
 };
 
 int _gnutls13_send_session_ticket(gnutls_session_t session, unsigned again);
-int _gnutls13_recv_session_ticket(gnutls_session_t session, gnutls_buffer_st *buf, struct tls13_nst_st *ticket);
+int _gnutls13_recv_session_ticket(gnutls_session_t session,
+		gnutls_buffer_st *buf, struct tls13_nst_st *ticket);
 
 int _gnutls13_unpack_session_ticket(gnutls_session_t session,
 		gnutls_datum_t *data,
 		gnutls_datum_t *rms, gnutls_mac_algorithm_t *kdf_id);
 
+int _gnutls13_session_ticket_set(gnutls_session_t session,
+		struct tls13_nst_st *ticket,
+		const uint8_t *rms, size_t rms_size,
+		const mac_entry_st *prf);
+int _gnutls13_session_ticket_get(gnutls_session_t session,
+		struct tls13_nst_st *ticket);
+int _gnutls13_session_ticket_peek(gnutls_session_t session,
+		struct tls13_nst_st *ticket);
+
+void _gnutls13_session_ticket_destroy(struct tls13_nst_st *ticket);
 #endif

@@ -471,6 +471,12 @@ struct gnutls_key_st {
 			uint8_t hs_skey[MAX_HASH_SIZE]; /* server_handshake_traffic_secret */
 			uint8_t ap_expkey[MAX_HASH_SIZE]; /* exporter_master_secret */
 			uint8_t ap_rms[MAX_HASH_SIZE]; /* resumption_master_secret */
+			/*
+			 * This is the resumption master secret from the original connection.
+			 * Used for session resumption.
+			 */
+			gnutls_datum_t ap_rms_original;
+			gnutls_mac_algorithm_t kdf_original; /* KDF of the original connection */
 		} tls13; /* tls1.3 */
 
 		/* Folow the SSL3.0 and TLS1.2 key exchanges */
@@ -1295,6 +1301,9 @@ typedef struct {
 
 	int session_ticket_enable;
 	int session_ticket_renew;
+
+	void *tls13_ticket;
+	unsigned tls13_ticket_len;
 
 	/* If you add anything here, check _gnutls_handshake_internal_state_clear().
 	 */

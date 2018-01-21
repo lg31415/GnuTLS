@@ -38,8 +38,6 @@ typedef struct {
 	size_t rms_size;
 } psk_ext_st;
 
-static int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket);
-
 static int
 compute_psk_from_ticket(const mac_entry_st *prf,
 		const uint8_t *rms,
@@ -227,6 +225,7 @@ client_send_params(gnutls_session_t session,
 		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 
 	memset(&username, 0, sizeof(gnutls_datum_t));
+	memset(&ticket, 0, sizeof(struct tls13_nst_st));
 
 	ret = get_credentials(session, cred, &username, &key);
 	if (ret < 0)
@@ -240,7 +239,7 @@ client_send_params(gnutls_session_t session,
 			username.data = ticket.ticket.data;
 			username.size = ticket.ticket.size;
 			/* Get the PRF for this ticket */
-			ticket_prf = _gnutls_mac_to_entry(ticket.kdf_id);
+			ticket_prf = _gnutls_mac_to_entry(session->key.proto.tls13.kdf_original);
 			if (unlikely(ticket_prf == NULL || ticket_prf->output_size == 0)) {
 				ret = gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 				goto cleanup;
@@ -332,6 +331,7 @@ client_send_params(gnutls_session_t session,
 	ret = extdata_len;
 
 cleanup:
+	_gnutls13_session_ticket_destroy(&ticket);
 	_gnutls_free_datum(&username);
 	return ret;
 }
@@ -625,141 +625,10 @@ static int _gnutls_psk_recv_params(gnutls_session_t session,
 	}
 }
 
-static void destroy_ticket(struct tls13_nst_st *ticket)
-{
-	if (ticket) {
-		_gnutls_free_datum(&ticket->ticket);
-		_gnutls_free_datum(&ticket->ticket_nonce);
-		memset(ticket, 0, sizeof(struct tls13_nst_st));
-		gnutls_free(ticket);
-	}
-}
-
-static int copy_ticket(struct tls13_nst_st *src, struct tls13_nst_st *dst)
-{
-	dst->ticket_lifetime = src->ticket_lifetime;
-	dst->ticket_age_add = src->ticket_age_add;
-
-	if (src->ticket_nonce.size > 0) {
-		dst->ticket_nonce.data = gnutls_malloc(src->ticket_nonce.size);
-		if (dst->ticket_nonce.data == NULL)
-			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-		dst->ticket_nonce.size = src->ticket_nonce.size;
-		memcpy(dst->ticket_nonce.data, src->ticket_nonce.data, src->ticket_nonce.size);
-	}
-
-	if (src->ticket.size > 0) {
-		dst->ticket.data = gnutls_malloc(src->ticket.size);
-		if (dst->ticket.data == NULL)
-			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-		dst->ticket.size = src->ticket.size;
-		memcpy(dst->ticket.data, src->ticket.data, src->ticket.size);
-	}
-
-	return 0;
-}
-
 static void _gnutls_psk_deinit(gnutls_ext_priv_data_t epriv)
 {
-	psk_ext_st *priv;
-
-	if (epriv) {
-		priv = epriv;
-
-		destroy_ticket(priv->session_ticket);
-
-		if (priv->rms) {
-			gnutls_free(priv->rms);
-			priv->rms = NULL;
-			priv->rms_size = 0;
-		}
-
-		gnutls_free(priv);
-	}
-}
-
-/*
- * Stores a session ticket locally.
- * All the fields of the ticket are copied, so they can safely be freed when this function returns.
- * The resumption master secret ('rms') is also copied.
- */
-int _gnutls13_session_ticket_set(gnutls_session_t session, struct tls13_nst_st *ticket,
-		const uint8_t *rms, size_t rms_size)
-{
-	psk_ext_st *priv = NULL;
-	struct tls13_nst_st *src, *dst;
-
-	if (unlikely(ticket == NULL))
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-	if (unlikely(rms == NULL || rms_size == 0))
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-
-	priv = gnutls_calloc(1, sizeof(psk_ext_st));
-	if (!priv)
-		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
-	priv->session_ticket = gnutls_calloc(1, sizeof(struct tls13_nst_st));
-	if (!priv->session_ticket) {
-		goto cleanup;
-	}
-
-	/* Copy the ticket */
-	src = ticket;
-	dst = priv->session_ticket;
-
-	if (copy_ticket(src, dst) < 0) {
-		gnutls_assert();
-		goto cleanup;
-	}
-
-	/* Copy the resumption master secret ('rms') for this session */
-	priv->rms = gnutls_calloc(1, rms_size);
-	if (!priv->rms) {
-		gnutls_assert();
-		goto cleanup;
-	}
-	priv->rms_size = rms_size;
-	memcpy(priv->rms, rms, rms_size);
-
-	_gnutls_hello_ext_set_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			(gnutls_ext_priv_data_t) priv);
-	return 0;
-
-cleanup:
-	_gnutls_psk_deinit(priv);
-	return GNUTLS_E_MEMORY_ERROR;
-}
-
-/*
- * Copy the locally stored session ticket to 'ticket'.
- * The fields of 'ticket' are copied not referenced, so they can be safely freed
- * after this function returns.
- */
-static int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket)
-{
-	int ret;
-	psk_ext_st *priv;
-	gnutls_ext_priv_data_t epriv;
-	struct tls13_nst_st *src, *dst;
-
-	if (unlikely(ticket == NULL))
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-
-	if (_gnutls_hello_ext_get_priv(session,
-			GNUTLS_EXTENSION_SESSION_TICKET,
-			&epriv) < 0)
-		return GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE;
-
-	priv = epriv;
-	src = priv->session_ticket;
-	dst = ticket;
-
-	if ((ret = copy_ticket(src, dst)) < 0) {
-		destroy_ticket(ticket);
-		return gnutls_assert_val(ret);
-	}
-
-	return 0;
+	if (epriv)
+		gnutls_free(epriv);
 }
 
 static int

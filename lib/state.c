@@ -246,6 +246,12 @@ void _gnutls_handshake_internal_state_clear(gnutls_session_t session)
 {
 	handshake_internal_state_clear1(session);
 
+	if (session->internals.tls13_ticket) {
+		gnutls_free(session->internals.tls13_ticket);
+		session->internals.tls13_ticket = NULL;
+	}
+	session->internals.tls13_ticket_len = 0;
+
 	_gnutls_handshake_hash_buffers_clear(session);
 	deinit_keys(session);
 

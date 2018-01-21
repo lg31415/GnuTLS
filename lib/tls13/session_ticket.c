@@ -40,6 +40,7 @@ static int parse_nst_extension(void *ctx, uint16_t tls_id, const uint8_t *data, 
 
 static int pack_ticket(struct tls13_nst_st *ticket,
 		const uint8_t *rms, unsigned rms_size,
+		gnutls_mac_algorithm_t kdf_id,
 		gnutls_datum_t *state)
 {
 	unsigned char *p;
@@ -53,7 +54,7 @@ static int pack_ticket(struct tls13_nst_st *ticket,
 
 	p = state->data;
 
-	_gnutls_write_uint16(ticket->kdf_id, p);
+	_gnutls_write_uint16(kdf_id, p);
 	p += sizeof(uint16_t);
 	_gnutls_write_uint32(rms_size, p);
 	p += sizeof(uint32_t);
@@ -260,6 +261,7 @@ static int generate_session_ticket(gnutls_session_t session, struct tls13_nst_st
 	/* This is the resumption master secret */
 	const uint8_t *rms = session->key.proto.tls13.ap_rms;
 	unsigned rms_len = MAX_HASH_SIZE;
+	gnutls_mac_algorithm_t kdf_id;
 
 	memset(&encrypted_ticket, 0, sizeof(struct ticket_st));
 
@@ -277,10 +279,10 @@ static int generate_session_ticket(gnutls_session_t session, struct tls13_nst_st
 
 	/* Set ticket lifetime to 1 day (86400 seconds) */
 	ticket->ticket_lifetime = 86400;
-	ticket->kdf_id = session->security_parameters.cs->prf;
+	kdf_id = session->security_parameters.cs->prf;
 
 	/* Encrypt the ticket and place the result in ticket->ticket */
-	ret = pack_ticket(ticket, rms, rms_len, &state);
+	ret = pack_ticket(ticket, rms, rms_len, kdf_id, &state);
 	if (ret < 0)
 		return gnutls_assert_val(ret);
 	ret = encrypt_ticket(session, &state, &encrypted_ticket);
@@ -528,5 +530,145 @@ int _gnutls13_unpack_session_ticket(gnutls_session_t session,
 static int parse_nst_extension(void *ctx, uint16_t tls_id, const uint8_t *data, int data_size)
 {
 	/* ignore all extensions */
+	return 0;
+}
+
+static int copy_ticket(struct tls13_nst_st *src, struct tls13_nst_st *dst)
+{
+	dst->ticket_lifetime = src->ticket_lifetime;
+	dst->ticket_age_add = src->ticket_age_add;
+
+	if (src->ticket_nonce.size > 0) {
+		dst->ticket_nonce.data = gnutls_malloc(src->ticket_nonce.size);
+		if (dst->ticket_nonce.data == NULL)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		dst->ticket_nonce.size = src->ticket_nonce.size;
+		memcpy(dst->ticket_nonce.data, src->ticket_nonce.data, src->ticket_nonce.size);
+	}
+
+	if (src->ticket.size > 0) {
+		dst->ticket.data = gnutls_malloc(src->ticket.size);
+		if (dst->ticket.data == NULL)
+			return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+		dst->ticket.size = src->ticket.size;
+		memcpy(dst->ticket.data, src->ticket.data, src->ticket.size);
+	}
+
+	return 0;
+}
+
+void _gnutls13_session_ticket_destroy(struct tls13_nst_st *ticket)
+{
+	if (ticket) {
+		_gnutls_free_datum(&ticket->ticket);
+		_gnutls_free_datum(&ticket->ticket_nonce);
+		memset(ticket, 0, sizeof(struct tls13_nst_st));
+	}
+}
+
+/*
+ * Stores a session ticket locally.
+ * All the fields of the ticket are copied, so they can safely be freed when this function returns.
+ * The resumption master secret ('rms') is also copied.
+ */
+int _gnutls13_session_ticket_set(gnutls_session_t session,
+		struct tls13_nst_st *ticket,
+		const uint8_t *rms, size_t rms_size,
+		const mac_entry_st *prf)
+{
+	gnutls_datum_t *rms_original;
+	struct tls13_nst_st *src, *dst;
+
+	if (unlikely(ticket == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+	if (unlikely(rms == NULL || rms_size == 0))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	if (session->internals.tls13_ticket)
+		gnutls_free(session->internals.tls13_ticket);
+
+	session->internals.tls13_ticket = gnutls_calloc(1, sizeof(struct tls13_nst_st));
+	if (session->internals.tls13_ticket == NULL)
+		return gnutls_assert_val(GNUTLS_E_MEMORY_ERROR);
+
+	/* Copy the ticket */
+	src = ticket;
+	dst = session->internals.tls13_ticket;
+
+	if (copy_ticket(src, dst) < 0) {
+		gnutls_assert();
+		goto cleanup;
+	}
+
+	/* Copy the resumption master secret ('rms') for this session */
+	rms_original = &session->key.proto.tls13.ap_rms_original;
+	rms_original->data = gnutls_calloc(1, rms_size);
+	if (!rms_original->data) {
+		gnutls_assert();
+		goto cleanup;
+	}
+	rms_original->size = rms_size;
+	memcpy(rms_original->data, rms, rms_size);
+
+	/* Set the KDF of the original connection */
+	session->key.proto.tls13.kdf_original = prf->id;
+
+	session->internals.tls13_ticket_len = sizeof(struct tls13_nst_st);
+	return 0;
+
+cleanup:
+	_gnutls13_session_ticket_destroy((struct tls13_nst_st *) session->internals.tls13_ticket);
+	session->internals.tls13_ticket = NULL;
+	session->internals.tls13_ticket_len = 0;
+	return GNUTLS_E_MEMORY_ERROR;
+}
+
+/*
+ * Copy the locally stored session ticket to 'ticket'.
+ * The fields of 'ticket' are copied not referenced, so they can be safely freed
+ * after this function returns.
+ */
+int _gnutls13_session_ticket_get(gnutls_session_t session, struct tls13_nst_st *ticket)
+{
+	int ret = GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE;
+	struct tls13_nst_st *src, *dst;
+
+	if (unlikely(ticket == NULL))
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+	if (session->internals.tls13_ticket_len > 0) {
+		src = session->internals.tls13_ticket;
+		dst = ticket;
+
+		if (!src)
+			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+		if ((ret = copy_ticket(src, dst)) < 0) {
+			_gnutls13_session_ticket_destroy(ticket);
+			return gnutls_assert_val(ret);
+		}
+	}
+
+	return ret;
+}
+
+/*
+ * Behaves just like _gnutls13_session_ticket_get(), but does not copy the data (except the scalars).
+ * It just references the pointers.
+ */
+int _gnutls13_session_ticket_peek(gnutls_session_t session, struct tls13_nst_st *ticket)
+{
+	struct tls13_nst_st *src, *dst;
+
+	src = session->internals.tls13_ticket;
+	dst = ticket;
+
+	if (session->internals.tls13_ticket_len > 0) {
+		if (!src)
+			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+		memcpy(dst, src, sizeof(struct tls13_nst_st));
+	}
+
 	return 0;
 }

@@ -35,7 +35,7 @@ See the end for copying conditions.
 ** p11tool: Fixed the deletion of objects in batch mode.
 
 ** API and ABI modifications:
-No changes since last version.
+gnutls_fips140_set_mode: Added
 
 
 * Version 3.6.1 (released 2017-10-21)

@@ -125,7 +125,7 @@ ctests += mini-record-2 simple gc set_pkcs12_cred cert certuniqueid tls-neg-ext-
 	 gnutls_x509_privkey_import gnutls_x509_crt_list_import \
 	 sign-verify-ext4 tls-neg-ext4-key \
 	 mini-dtls-srtp rsa-encrypt-decrypt mini-loss-time gnutls-strcodes \
-	 mini-record mini-dtls-record mini-handshake-timeout mini-record-range \
+	 mini-record mini-dtls-record mini-handshake-timeout mini-record-range mini-record-range-2 \
 	 mini-cert-status rsa-psk global-init sec-params sign-verify-data \
 	 fips-test mini-global-load name-constraints x509-extensions \
 	 long-session-id mini-x509-callbacks-intr mini-dtls-lowmtu \

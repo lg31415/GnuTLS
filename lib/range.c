@@ -217,10 +217,54 @@ gnutls_range_split(gnutls_session_t session,
 }
 
 static size_t
-_gnutls_range_fragment(size_t data_size, gnutls_range_st cur,
-		       gnutls_range_st next)
+_gnutls_range_fragment(size_t data_size, const gnutls_range_st * cur,
+		       const gnutls_range_st * next)
 {
-	return MIN(cur.high, data_size - next.low);
+	return MIN(cur->high, data_size - next->low);
+}
+
+static ssize_t
+_gnutls_range_send(gnutls_session_t session, const void *data,
+		   size_t data_size, const gnutls_range_st * range,
+		   const gnutls_range_st * remainder)
+{
+	size_t fragment_size;
+	ssize_t ret;
+
+	fragment_size = _gnutls_range_fragment(data_size, range, remainder);
+
+	_gnutls_record_log
+		("RANGE: Fragment size: %d (%d,%d); remaining range: (%d,%d)\n",
+		 (int) fragment_size, (int) range->low,
+		 (int) range->high, (int) remainder->low,
+		 (int) remainder->high);
+
+	ret = _gnutls_send_tlen_int(session, GNUTLS_APPLICATION_DATA,
+				    -1, EPOCH_WRITE_CURRENT,
+				    (char *) data,
+				    fragment_size,
+				    range->high - fragment_size,
+				    MBUFFER_FLUSH);
+
+	while (ret == GNUTLS_E_AGAIN || ret == GNUTLS_E_INTERRUPTED) {
+		ret = _gnutls_send_tlen_int(session,
+					    GNUTLS_APPLICATION_DATA,
+					    -1, EPOCH_WRITE_CURRENT,
+					    NULL, 0, 0,
+					    MBUFFER_FLUSH);
+	}
+
+	if (ret < 0) {
+		return gnutls_assert_val(ret);
+	}
+	if (ret != (ssize_t) fragment_size) {
+		_gnutls_record_log
+			("RANGE: ERROR: ret = %d; fragment_size = %d\n",
+			 (int) ret, (int) fragment_size);
+		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+	}
+
+	return fragment_size;
 }
 
 /**
@@ -249,7 +293,6 @@ gnutls_record_send_range(gnutls_session_t session, const void *data,
 			 size_t data_size, const gnutls_range_st * range)
 {
 	size_t sent = 0;
-	size_t next_fragment_length;
 	ssize_t ret;
 	gnutls_range_st cur_range, next_range;
 
@@ -277,49 +320,63 @@ gnutls_record_send_range(gnutls_session_t session, const void *data,
 			return ret;	/* already gnutls_assert_val'd */
 		}
 
-		next_fragment_length =
-		    _gnutls_range_fragment(data_size, cur_range,
-					   next_range);
-
-		_gnutls_record_log
-		    ("RANGE: Next fragment size: %d (%d,%d); remaining range: (%d,%d)\n",
-		     (int) next_fragment_length, (int) cur_range.low,
-		     (int) cur_range.high, (int) next_range.low,
-		     (int) next_range.high);
-
 		ret =
-		    _gnutls_send_tlen_int(session, GNUTLS_APPLICATION_DATA,
-					  -1, EPOCH_WRITE_CURRENT,
-					  &(((char *) data)[sent]),
-					  next_fragment_length,
-					  cur_range.high -
-					  next_fragment_length,
-					  MBUFFER_FLUSH);
-
-		while (ret == GNUTLS_E_AGAIN
-		       || ret == GNUTLS_E_INTERRUPTED) {
-			ret =
-			    _gnutls_send_tlen_int(session,
-						  GNUTLS_APPLICATION_DATA,
-						  -1, EPOCH_WRITE_CURRENT,
-						  NULL, 0, 0,
-						  MBUFFER_FLUSH);
-		}
-
+		    _gnutls_range_send(session, data, data_size,
+				       &cur_range, &next_range);
 		if (ret < 0) {
-			return gnutls_assert_val(ret);
+			return ret;	/* already gnutls_assert_val'd */
 		}
-		if (ret != (ssize_t) next_fragment_length) {
-			_gnutls_record_log
-			    ("RANGE: ERROR: ret = %d; next_fragment_length = %d\n",
-			     (int) ret, (int) next_fragment_length);
-			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-		}
-		sent += next_fragment_length;
-		data_size -= next_fragment_length;
+
+		sent += ret;
+		data_size -= ret;
 		_gnutls_set_range(&cur_range, next_range.low,
 				  next_range.high);
 	}
 
 	return sent;
+}
+
+/**
+ * gnutls_record_send_range2:
+ * @session: is a #gnutls_session_t type.
+ * @data: contains the data to send.
+ * @data_size: is the length of the data.
+ * @range: is the range of lengths in which the real data length must be hidden.
+ * @remainder: is the range of lengths in which the real data length must be hidden.
+ *
+ * This function operates like gnutls_record_send() but, while
+ * gnutls_record_send() adds minimal padding to each TLS record,
+ * this function uses the TLS extra-padding feature to conceal the real
+ * data size within the range of lengths provided.
+ *
+ * This function is identical to gnutls_record_send_range(), except
+ * that the caller must split the range so that @range fits the max
+ * record size.  Use gnutls_range_split() for the default spliting
+ * algorithm.
+ *
+ * Note: This function currently is limited to blocking sockets.
+ *
+ * Returns: The number of bytes sent (that is data_size in a successful invocation),
+ * or a negative error code.
+ **/
+ssize_t
+gnutls_record_send_range2(gnutls_session_t session, const void *data,
+			  size_t data_size, const gnutls_range_st * range,
+			  const gnutls_range_st * remainder)
+{
+	ssize_t ret;
+
+	/* sanity check on range and data size */
+	if (range->low > range->high || remainder->low > remainder->high)
+		return gnutls_assert_val(GNUTLS_E_INVALID_REQUEST);
+
+	ret = gnutls_record_can_use_length_hiding(session);
+	if (ret == 0)
+		return gnutls_assert_val(GNUTLS_E_INVALID_REQUEST);
+
+	_gnutls_record_log
+	    ("RANGE: Preparing message with size %d, range (%d,%d)\n",
+	     (int) data_size, (int) range->low, (int) range->high);
+
+	return _gnutls_range_send(session, data, data_size, range, remainder);
 }

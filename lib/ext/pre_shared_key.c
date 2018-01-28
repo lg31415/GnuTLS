@@ -211,42 +211,50 @@ client_send_params(gnutls_session_t session,
 		gnutls_buffer_t extdata,
 		const gnutls_psk_client_credentials_t cred)
 {
-	int ret, extdata_len = 0, ext_offset = 0;
+	int ret = 0, extdata_len = 0, ext_offset = 0;
 	uint8_t binder_value[MAX_HASH_SIZE];
-	size_t length, pos = extdata->length;
-	gnutls_datum_t username, key, client_hello;
-	const mac_entry_st *prf = _gnutls_mac_to_entry(cred->tls13_binder_algo),
-			*ticket_prf = NULL;
-	unsigned hash_size = _gnutls_mac_get_algo_len(prf);
+	size_t length, pos;
+	const mac_entry_st *prf = NULL;
+	unsigned hash_size = 0;
 	struct tls13_nst_st ticket;
+	const uint8_t *rms = NULL;
 	uint32_t ob_ticket_age = 0;
+	gnutls_datum_t username = { NULL, 0 }, key = { NULL, 0 },
+			client_hello = { NULL, 0 };
 
-	if (prf == NULL || hash_size == 0 || hash_size > 255)
-		return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
-
-	memset(&username, 0, sizeof(gnutls_datum_t));
 	memset(&ticket, 0, sizeof(struct tls13_nst_st));
 
-	ret = get_credentials(session, cred, &username, &key);
-	if (ret < 0)
-		return gnutls_assert_val(ret);
+	if (cred) {
+		prf = _gnutls_mac_to_entry(cred->tls13_binder_algo);
+		hash_size = _gnutls_mac_get_algo_len(prf);
+		if (prf == NULL || hash_size == 0 || hash_size > 255)
+			return gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
+
+		ret = get_credentials(session, cred, &username, &key);
+		if (ret < 0)
+			return gnutls_assert_val(ret);
+	}
 
 	/* No out-of-band PSKs - let's see if we have a session ticket to send */
-	if (ret == 0) {
+	if (prf == NULL) {
 		ret = _gnutls13_session_ticket_get(session, &ticket);
 		if (ret > 0) {
 			/* We found a session ticket */
-			username.data = ticket.ticket.data;
-			username.size = ticket.ticket.size;
-			/* Get the PRF for this ticket */
-			ticket_prf = _gnutls_mac_to_entry(session->key.proto.tls13.kdf_original);
-			if (unlikely(ticket_prf == NULL || ticket_prf->output_size == 0)) {
+			/* FIXME we should not get this value directly from session->key */
+			prf = _gnutls_mac_to_entry(session->key.proto.tls13.kdf_original);
+			hash_size = _gnutls_mac_get_algo_len(prf);
+			if (unlikely(prf == NULL || hash_size == 0)) {
 				ret = gnutls_assert_val(GNUTLS_E_INTERNAL_ERROR);
 				goto cleanup;
 			}
-			/* FIXME 'rms' must not be NULL */
-			ret = compute_psk_from_ticket(ticket_prf,
-					NULL,
+
+			username.data = ticket.ticket.data;
+			username.size = ticket.ticket.size;
+
+			/* FIXME we should not get this value directly from session->key */
+			rms = session->key.proto.tls13.ap_rms_original.data;
+			ret = compute_psk_from_ticket(prf,
+					rms,
 					&ticket, &key);
 			if (ret < 0) {
 				gnutls_assert();
@@ -259,11 +267,13 @@ client_send_params(gnutls_session_t session,
 	}
 
 	/* No credentials - this extension is not applicable */
-	if (ret == 0) {
+	if (prf == NULL) {
 		ret = 0;
 		goto cleanup;
 	}
 
+	/* Make some room for the identities length (16 bits) */
+	pos = extdata->length;
 	ret = _gnutls_buffer_append_prefix(extdata, 16, 0);
 	if (ret < 0) {
 		gnutls_assert_val(ret);
@@ -410,6 +420,8 @@ static int server_recv_params(gnutls_session_t session,
 	int psk_index = -1;
 	gnutls_datum_t binder_recvd;
 	gnutls_datum_t username, key;
+	gnutls_datum_t ticket_data = { NULL, 0 }, rms = { NULL, 0 };
+	gnutls_mac_algorithm_t kdf_id;
 	unsigned hash_size;
 	struct psk_parser_st psk_parser;
 	struct psk_st psk;
@@ -419,24 +431,26 @@ static int server_recv_params(gnutls_session_t session,
 	memset(&username, 0, sizeof(gnutls_datum_t));
 	memset(&key, 0, sizeof(gnutls_datum_t));
 
-	/* No credentials - this extension is not applicable */
-	if (!pskcred->hint)
-		return 0;
+	if (pskcred) {
+		/* No credentials - this extension is not applicable */
+		if (!pskcred->hint)
+			return 0;
 
-	username.data = (unsigned char *) pskcred->hint;
-	username.size = strlen(pskcred->hint);
-
-	ret = _gnutls_psk_pwd_find_entry(session, pskcred->hint, &key);
-	if (ret < 0)
-		return ret;
-
-	if (pskcred->hint) {
 		username.data = (unsigned char *) pskcred->hint;
 		username.size = strlen(pskcred->hint);
 
 		ret = _gnutls_psk_pwd_find_entry(session, pskcred->hint, &key);
 		if (ret < 0)
 			return ret;
+
+		if (pskcred->hint) {
+			username.data = (unsigned char *) pskcred->hint;
+			username.size = strlen(pskcred->hint);
+
+			ret = _gnutls_psk_pwd_find_entry(session, pskcred->hint, &key);
+			if (ret < 0)
+				return ret;
+		}
 	}
 
 	ttl_identities_len = _gnutls_read_uint16(data);
@@ -464,7 +478,9 @@ static int server_recv_params(gnutls_session_t session,
 			break;
 
 		ticket = (struct ticket_st *) psk.identity.data;
-		if (_gnutls_decrypt_session_ticket(session, ticket) == 0) {
+		ticket_data.data = psk.identity.data;
+		ticket_data.size = psk.identity.size;
+		if (_gnutls13_unpack_session_ticket(session, &ticket_data, &rms, &kdf_id) > 0) {
 			psk_index = psk.selected_index;
 
 			key.data = ticket->encrypted_state;
@@ -576,13 +592,7 @@ static int _gnutls_psk_send_params(gnutls_session_t session,
 					_gnutls_get_cred(session, GNUTLS_CRD_PSK);
 		}
 
-		/*
-		 * If there are no PSK credentials, this extension is not applicable,
-		 * so we return zero.
-		 */
-		return (cred ?
-				client_send_params(session, extdata, cred) :
-				0);
+		return client_send_params(session, extdata, cred);
 	} else {
 		if (session->internals.hsk_flags & HSK_PSK_KE_MODES_RECEIVED)
 			return server_send_params(session, extdata);
@@ -612,13 +622,7 @@ static int _gnutls_psk_recv_params(gnutls_session_t session,
 			pskcred = (gnutls_psk_server_credentials_t)
 					_gnutls_get_cred(session, GNUTLS_CRD_PSK);
 
-			/*
-			 * If there are no PSK credentials, this extension is not applicable,
-			 * so we return zero.
-			 */
-			return (pskcred ?
-					server_recv_params(session, data, len, pskcred) :
-					0);
+			return server_recv_params(session, data, len, pskcred);
 		} else {
 			return gnutls_assert_val(GNUTLS_E_UNEXPECTED_PACKET);
 		}

@@ -2487,7 +2487,8 @@ int gnutls_handshake(gnutls_session_t session)
 		if (ret < 0)
 			return gnutls_assert_val(ret);
 
-		session->internals.ticket_sent = 1;
+		if (ret > 0)
+			session->internals.ticket_sent = 1;
 		STATE = STATE0;
 	}
 

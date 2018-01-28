@@ -322,12 +322,11 @@ tls13_pack_security_parameters(gnutls_session_t session, gnutls_buffer_st *ps)
 	size_t length_pos;
 	struct tls13_nst_st ticket;
 
+	length_pos = ps->length;
+	BUFFER_APPEND_NUM(ps, 0);
+
 	ret = _gnutls13_session_ticket_peek(session, &ticket);
-
-	if (likely(ret == 0)) {
-		length_pos = ps->length;
-		BUFFER_APPEND_NUM(ps, 0);
-
+	if (likely(ret > 0)) {
 		BUFFER_APPEND_NUM(ps, ticket.ticket_lifetime);
 		length += 4;
 		BUFFER_APPEND_NUM(ps, ticket.ticket_age_add);
@@ -348,7 +347,7 @@ tls13_pack_security_parameters(gnutls_session_t session, gnutls_buffer_st *ps)
 
 		/* Overwrite the length field */
 		_gnutls_write_uint32(length, ps->data + length_pos);
-	} else if (ret < 0 && ret != GNUTLS_E_REQUESTED_DATA_NOT_AVAILABLE) {
+	} else if (ret < 0) {
 		return gnutls_assert_val(ret);
 	}
 

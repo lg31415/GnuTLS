@@ -34,7 +34,7 @@ struct psk_parser_st {
 
 struct psk_st {
 	gnutls_datum_t identity;
-	uint16_t ob_ticket_age;
+	uint32_t ob_ticket_age;
 	int selected_index;
 };
 

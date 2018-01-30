@@ -30,6 +30,10 @@ See the end for copying conditions.
 ** libgnutls: Added the 8192-bit parameters of SRP to the accepted parameters
    for SRP authentication.
 
+** libgnutls: Introduce function to switch the current FIPS140-2 operational
+   mode, i.e., strict vs a more lax mode which will allow certain non FIPS140-2
+   operations.
+
 ** srptool: the --create-conf option no longer includes 1024-bit parameters.
 
 ** p11tool: Fixed the deletion of objects in batch mode.
